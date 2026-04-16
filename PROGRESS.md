@@ -29,7 +29,7 @@
 - [x] Project scaffolding — monorepo setup (client + server + shared), Vite config, Tailwind, Express bootstrap, SQLite init, `.env` wiring
 - [x] Database schema — run `schema.sql`, all tables: subjects, modules, ai_outputs, quizzes, quiz_modules, fa_sessions, weak_points, tasks
 - [ ] Subject CRUD — `GET/POST/DELETE /subjects`; sidebar subject tree renders subjects, create/delete works
-- [ ] Module upload — `POST /subjects/:id/modules/upload`; Multer config (20MB, PDF+DOCX only); file saved to `/uploads`; module row inserted
+- [x] Module upload — `POST /subjects/:id/modules/upload`; Multer config (20MB, PDF+DOCX only); file saved to `/uploads`; module row inserted
 - [ ] File parsing — pdf-parse + mammoth text extraction service (`server/src/services/parser.ts`)
 - [ ] Claude proxy + SSE streaming — prompt assembly service, SSE relay to client, `useStreamingOutput` hook
 - [ ] Pre-Scan generation — `POST /modules/:id/generate` with `output_type: prescan`; prompt per AI constraints in PRD §9; output saved to `ai_outputs`
@@ -67,3 +67,4 @@
 | 2026-04-16 | Developer | Project scaffolding | Complete |
 | 2026-04-16 | Developer | Database schema | Complete |
 | 2026-04-16 | Developer | App shell | Complete |
+| 2026-04-16 | Developer | Module upload | Complete |
