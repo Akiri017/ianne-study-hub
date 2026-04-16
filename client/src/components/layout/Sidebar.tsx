@@ -3,15 +3,12 @@ import { NavLink } from 'react-router-dom'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import SectionLabel from '../ui/SectionLabel'
-
-interface Subject {
-  id: number
-  name: string
-  created_at: string
-}
+import { getSubjects, deleteSubject, type Subject } from '../../lib/api'
 
 // ---------------------------------------------------------------------------
 // NewSubjectModal
+// Controlled externally — isOpen and setIsOpen come from AppShell so other
+// parts of the UI (e.g. DashboardPage empty state) can trigger it too.
 // ---------------------------------------------------------------------------
 
 interface NewSubjectModalProps {
@@ -31,7 +28,7 @@ function NewSubjectModal({ isOpen, onClose, onCreated }: NewSubjectModalProps) {
     if (isOpen) {
       setName('')
       setError(null)
-      // Focus happens via Modal focus trap — but also target input directly
+      // Small delay to let the modal animation settle before focusing
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
@@ -104,34 +101,91 @@ function NewSubjectModal({ isOpen, onClose, onCreated }: NewSubjectModalProps) {
 
 // ---------------------------------------------------------------------------
 // SubjectTreeItem
+// Shows subject name + chevron + 0 module count badge.
+// Expand/collapse toggles an inline "No modules yet" message.
+// Delete button (×) appears on hover; confirms before firing DELETE.
 // ---------------------------------------------------------------------------
 
 interface SubjectTreeItemProps {
   subject: Subject
+  onDeleted: () => void
 }
 
-function SubjectTreeItem({ subject }: SubjectTreeItemProps) {
+function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
   const [expanded, setExpanded] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    // Stop the row click (expand/collapse) from firing
+    e.stopPropagation()
+
+    if (!window.confirm(`Delete "${subject.name}"? This will remove all associated modules, outputs, weak points, and tasks.`)) {
+      return
+    }
+
+    setDeleting(true)
+    try {
+      const result = await deleteSubject(subject.id)
+      if ('error' in result) {
+        console.error('[Sidebar] delete subject error:', result.error)
+      } else {
+        onDeleted()
+      }
+    } catch (err) {
+      console.error('[Sidebar] delete subject network error:', err)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <div>
-      {/* Subject row */}
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-elevated transition-colors duration-100 group"
-      >
-        {/* Active left border is rendered on the NavLink for /subjects/:id — for now just toggle */}
-        <span className="text-text-secondary text-sm truncate flex-1">{subject.name}</span>
-        {/* Chevron */}
-        <span className={`text-text-muted text-xs transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}>
-          ›
-        </span>
-      </button>
+      {/* Subject row — wraps the NavLink for active styling + expand trigger */}
+      <div className="relative group flex items-center">
+        {/* NavLink provides the /subjects/:id navigation and active left-border styling */}
+        <NavLink
+          to={`/subjects/${subject.id}`}
+          className={({ isActive }) =>
+            [
+              'flex-1 flex items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-elevated transition-colors duration-100 min-w-0',
+              isActive ? 'border-l-2 border-accent text-text-primary' : 'text-text-secondary',
+            ].join(' ')
+          }
+          onClick={(e) => {
+            // Also toggle expand when clicking the nav item
+            // (navigation happens; this just controls the tree state)
+            e.preventDefault()
+            setExpanded((v) => !v)
+          }}
+        >
+          <span className="truncate flex-1 text-sm">{subject.name}</span>
 
-      {/* Expanded: module list (empty for now — module loading is a later task) */}
+          {/* Module count badge — 0 for now; populated in modules task */}
+          <span className="font-mono text-xs bg-bg-subtle text-text-muted px-1.5 py-0.5 rounded-sm shrink-0">
+            0
+          </span>
+
+          {/* Chevron */}
+          <span className={`text-text-muted text-xs transition-transform duration-150 shrink-0 ${expanded ? 'rotate-90' : ''}`}>
+            ›
+          </span>
+        </NavLink>
+
+        {/* Delete button — only visible on group hover */}
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label={`Delete ${subject.name}`}
+          className="absolute right-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-muted hover:text-error transition-opacity duration-100 p-1 rounded"
+        >
+          <span className="text-xs leading-none">×</span>
+        </button>
+      </div>
+
+      {/* Expanded: module list placeholder — module fetching is a later task */}
       {expanded && (
         <div className="pl-6 pb-1">
-          <p className="text-text-muted text-xs font-mono py-1 px-2">No modules</p>
+          <p className="text-text-muted text-xs font-mono py-1 px-2">No modules yet.</p>
         </div>
       )}
     </div>
@@ -160,22 +214,38 @@ function SkeletonRows() {
 // Sidebar
 // ---------------------------------------------------------------------------
 
+interface SidebarProps {
+  /** Controls whether the New Subject modal is open — owned by AppShell */
+  newSubjectOpen: boolean
+  setNewSubjectOpen: (open: boolean) => void
+  /** Called after a subject is successfully created so AppShell can bump the version */
+  onSubjectCreated: () => void
+  /**
+   * Incremented by AppShell when a subject is created or deleted.
+   * Sidebar watches this to trigger a refetch.
+   */
+  subjectListVersion: number
+}
+
 /**
  * 240px fixed sidebar.
- * Fetches subjects from GET /api/subjects on mount.
- * Supports expanding subjects (module list placeholder) and creating new subjects.
+ * Fetches subjects from GET /api/subjects on mount and whenever subjectListVersion changes.
+ * The New Subject modal state is owned externally (AppShell) so DashboardPage can
+ * open it via AppContext without the modal living in this component's state.
  */
-export default function Sidebar() {
+export default function Sidebar({
+  newSubjectOpen,
+  setNewSubjectOpen,
+  onSubjectCreated,
+  subjectListVersion,
+}: SidebarProps) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
 
   const fetchSubjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/subjects')
-      if (!res.ok) throw new Error(`Server error ${res.status}`)
-      const data = await res.json()
+      const data = await getSubjects()
       setSubjects(data.subjects ?? [])
       setFetchError(null)
     } catch (err) {
@@ -185,9 +255,18 @@ export default function Sidebar() {
     }
   }, [])
 
+  // Refetch when the list version bumps (subject created or deleted)
   useEffect(() => {
     fetchSubjects()
-  }, [fetchSubjects])
+  }, [fetchSubjects, subjectListVersion])
+
+  const handleSubjectCreated = () => {
+    onSubjectCreated() // tell AppShell to bump version → triggers refetch
+  }
+
+  const handleSubjectDeleted = () => {
+    onSubjectCreated() // same signal — reuse the version bump mechanism
+  }
 
   return (
     <>
@@ -238,14 +317,18 @@ export default function Sidebar() {
           )}
 
           {!loading && !fetchError && subjects.map((subject) => (
-            <SubjectTreeItem key={subject.id} subject={subject} />
+            <SubjectTreeItem
+              key={subject.id}
+              subject={subject}
+              onDeleted={handleSubjectDeleted}
+            />
           ))}
         </div>
 
         {/* New Subject button — pinned to bottom of sidebar */}
         <div className="px-3 py-3 border-t border-border-default shrink-0">
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={() => setNewSubjectOpen(true)}
             className="w-full flex items-center gap-1.5 text-text-secondary text-sm hover:text-text-primary transition-colors duration-100 py-1"
           >
             <span className="text-base leading-none">+</span>
@@ -255,9 +338,9 @@ export default function Sidebar() {
       </aside>
 
       <NewSubjectModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreated={fetchSubjects}
+        isOpen={newSubjectOpen}
+        onClose={() => setNewSubjectOpen(false)}
+        onCreated={handleSubjectCreated}
       />
     </>
   )

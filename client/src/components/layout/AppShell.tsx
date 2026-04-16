@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import StatusBar from './StatusBar'
 import RightPanel from './RightPanel'
+import { AppContext } from '../../lib/app-context'
 
 /**
  * Root layout wrapper. Renders the persistent shell around all page content.
@@ -13,43 +14,61 @@ import RightPanel from './RightPanel'
  *   ├── Sidebar (240px) | <Outlet /> (flex-1) | RightPanel (280px, toggleable)
  *   StatusBar (24px, full width)
  *
- * Right panel open state lives here so both Topbar (toggle button) and
- * RightPanel (visibility) can share it without prop-drilling through pages.
+ * State that lives here (owned at this level because it spans multiple children):
+ *   - rightPanelOpen: shared between Topbar toggle and RightPanel visibility
+ *   - newSubjectOpen: New Subject modal state — Sidebar renders the modal but
+ *     DashboardPage can trigger it via AppContext without prop drilling through Outlet
  */
 export default function AppShell() {
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
+  const [newSubjectOpen, setNewSubjectOpen] = useState(false)
+  const [subjectListVersion, setSubjectListVersion] = useState(0)
   const location = useLocation()
 
   // Build breadcrumb from URL — expanded in later tasks when subject/module routes exist
-  // For now the dashboard route has no breadcrumb segments
   const breadcrumb = buildBreadcrumb(location.pathname)
 
+  // Stable callback so Sidebar/context consumers don't re-render unnecessarily
+  const openNewSubject = useCallback(() => setNewSubjectOpen(true), [])
+
+  // Increment version to signal Sidebar to refetch after a subject is created/deleted
+  const handleSubjectCreated = useCallback(() => {
+    setSubjectListVersion((v) => v + 1)
+  }, [])
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-bg-base">
-      <Topbar
-        breadcrumb={breadcrumb}
-        onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
-        rightPanelOpen={rightPanelOpen}
-      />
+    <AppContext.Provider value={{ openNewSubject }}>
+      <div className="h-screen flex flex-col overflow-hidden bg-bg-base">
+        <Topbar
+          breadcrumb={breadcrumb}
+          onToggleRightPanel={() => setRightPanelOpen((v) => !v)}
+          rightPanelOpen={rightPanelOpen}
+        />
 
-      {/* Middle row — sidebar + content + right panel */}
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        <Sidebar />
+        {/* Middle row — sidebar + content + right panel */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          <Sidebar
+            newSubjectOpen={newSubjectOpen}
+            setNewSubjectOpen={setNewSubjectOpen}
+            onSubjectCreated={handleSubjectCreated}
+            subjectListVersion={subjectListVersion}
+          />
 
-        {/* Main content — scrolls independently */}
-        <main className="flex-1 overflow-y-auto bg-bg-base">
-          <Outlet />
-        </main>
+          {/* Main content — scrolls independently */}
+          <main className="flex-1 overflow-y-auto bg-bg-base">
+            <Outlet />
+          </main>
 
-        <RightPanel isOpen={rightPanelOpen} />
+          <RightPanel isOpen={rightPanelOpen} />
+        </div>
+
+        <StatusBar
+          subject={breadcrumb.subject}
+          module={breadcrumb.module}
+          isStreaming={false}
+        />
       </div>
-
-      <StatusBar
-        subject={breadcrumb.subject}
-        module={breadcrumb.module}
-        isStreaming={false}
-      />
-    </div>
+    </AppContext.Provider>
   )
 }
 

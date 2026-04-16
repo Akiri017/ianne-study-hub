@@ -1,5 +1,6 @@
 import SectionLabel from '../components/ui/SectionLabel'
 import Button from '../components/ui/Button'
+import { useAppContext } from '../lib/app-context'
 
 // ---------------------------------------------------------------------------
 // Stat card
@@ -37,8 +38,14 @@ function StatCard({ label, value, alertOnNonZero = false }: StatCardProps) {
  * Displays a stats strip and a recent modules section.
  * Data is hardcoded to 0 / empty for now — wired in later tasks once
  * API hooks are built.
+ *
+ * The "New Subject" button in the empty state is wired to AppContext.openNewSubject
+ * so it opens the same modal controlled by AppShell, without prop-drilling
+ * through Outlet.
  */
 export default function DashboardPage() {
+  const { openNewSubject } = useAppContext()
+
   // Hardcoded until data hooks are wired — later task
   const openWeakPoints = 0
   const upcomingDeadlines = 0
@@ -86,10 +93,12 @@ export default function DashboardPage() {
           <p className="text-text-secondary text-sm">
             No subjects yet. Create your first subject to get started.
           </p>
-          {/* Clicking this mirrors the Sidebar's "New Subject" button —
-              in a later task this can be wired to open the modal via context.
-              For now it's decorative / placeholder. */}
-          <Button variant="primary" size="sm" onClick={() => {}}>
+          {/*
+            openNewSubject comes from AppContext — AppShell owns the modal state and
+            passes the opener via context so this button and the Sidebar button both
+            control the same modal instance.
+          */}
+          <Button variant="primary" size="sm" onClick={openNewSubject}>
             New Subject
           </Button>
         </section>
