@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Database
+study-hub.db
+
+# Environment variables — never commit secrets
+.env
+
+# Uploaded files (runtime artifacts, not source)
+server/uploads/*
+# Keep the uploads directory itself tracked
+!server/uploads/.gitkeep
+
+# Build outputs
+dist/
+client/dist/
+server/dist/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Files
+.claude/
+CLAUDE.md
+PROGRESS.md

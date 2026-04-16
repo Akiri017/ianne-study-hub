@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  @keyframes fadeScaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+@layer base {
+  :root {
+    /* Backgrounds */
+    --bg-base:        #0B0F19;
+    --bg-surface:     #111827;
+    --bg-elevated:    #1C2333;
+    --bg-subtle:      #1F2937;
+
+    /* Borders */
+    --border-default: #2D3748;
+    --border-strong:  #4A5568;
+
+    /* Text */
+    --text-primary:   #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted:     #64748B;
+    --text-inverse:   #0B0F19;
+
+    /* Accent — single indigo */
+    --accent:         #6366F1;
+    --accent-hover:   #818CF8;
+    --accent-subtle:  #1E1B4B;
+
+    /* Status colors */
+    --status-open:          #EF4444;
+    --status-open-bg:       #450A0A;
+    --status-patched:       #F59E0B;
+    --status-patched-bg:    #451A03;
+    --status-confirmed:     #10B981;
+    --status-confirmed-bg:  #064E3B;
+
+    /* Semantic */
+    --success: #10B981;
+    --warning: #F59E0B;
+    --error:   #EF4444;
+    --info:    #6366F1;
+
+    /* Streaming indicator */
+    --stream-pulse: #6366F1;
+
+    /* Typography */
+    --font-sans: 'Inter', 'SF Pro Text', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  }
+
+  html,
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+  }
+}
