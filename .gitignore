@@ -3,6 +3,8 @@ node_modules/
 
 # Database
 study-hub.db
+study-hub.db-shm
+study-hub.db-wal
 
 # Environment variables — never commit secrets
 .env
