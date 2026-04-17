@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import SectionLabel from '../ui/SectionLabel'
-import { getSubjects, deleteSubject, type Subject } from '../../lib/api'
+import { getSubjects, deleteSubject, getModules, type Subject, type Module } from '../../lib/api'
 
 // ---------------------------------------------------------------------------
 // NewSubjectModal
@@ -100,9 +100,79 @@ function NewSubjectModal({ isOpen, onClose, onCreated }: NewSubjectModalProps) {
 }
 
 // ---------------------------------------------------------------------------
+// SubjectModuleList
+// Fetches and displays the real module list for an expanded subject.
+// Shown only when the subject tree item is expanded.
+// ---------------------------------------------------------------------------
+
+interface SubjectModuleListProps {
+  subject: Subject
+}
+
+function SubjectModuleList({ subject }: SubjectModuleListProps) {
+  const navigate = useNavigate()
+  const [modules, setModules] = useState<Module[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Fetch modules when the list mounts (i.e. subject row expands)
+    getModules(subject.id)
+      .then((data) => {
+        setModules(data.modules ?? [])
+        setError(null)
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load.')
+      })
+      .finally(() => setLoading(false))
+  }, [subject.id])
+
+  if (loading) {
+    return (
+      <p className="text-text-muted text-xs font-mono py-1 px-2">Loading…</p>
+    )
+  }
+
+  if (error) {
+    return (
+      <p className="text-error text-xs font-mono py-1 px-2">Failed to load.</p>
+    )
+  }
+
+  if (modules.length === 0) {
+    return (
+      <p className="text-text-muted text-xs font-mono py-1 px-2">No modules yet.</p>
+    )
+  }
+
+  return (
+    <ul className="flex flex-col gap-0">
+      {modules.map((mod) => (
+        <li key={mod.id}>
+          <button
+            onClick={() =>
+              navigate(`/subjects/${subject.id}/modules/${mod.id}`, {
+                state: { moduleTitle: mod.title },
+              })
+            }
+            className="w-full flex items-center gap-2 px-2 py-1 text-left text-text-secondary text-xs hover:bg-bg-elevated hover:text-text-primary transition-colors duration-100 rounded-sm min-w-0"
+          >
+            <span className="truncate flex-1">{mod.title}</span>
+            <span className="font-mono text-[10px] bg-bg-subtle text-text-muted px-1 py-0.5 rounded-sm uppercase shrink-0">
+              {mod.file_type}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // SubjectTreeItem
-// Shows subject name + chevron + 0 module count badge.
-// Expand/collapse toggles an inline "No modules yet" message.
+// Shows subject name + chevron + module count badge.
+// Clicking the NavLink both navigates to /subjects/:id AND toggles expand.
 // Delete button (×) appears on hover; confirms before firing DELETE.
 // ---------------------------------------------------------------------------
 
@@ -114,9 +184,11 @@ interface SubjectTreeItemProps {
 function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Track real module count — populated when modules are fetched on expand
+  const [moduleCount, setModuleCount] = useState<number | null>(null)
 
   const handleDelete = async (e: React.MouseEvent) => {
-    // Stop the row click (expand/collapse) from firing
+    // Stop the row click from toggling expand
     e.stopPropagation()
 
     if (!window.confirm(`Delete "${subject.name}"? This will remove all associated modules, outputs, weak points, and tasks.`)) {
@@ -138,11 +210,27 @@ function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
     }
   }
 
+  // When the tree expands, also fetch module count if we don't have it yet
+  const handleExpand = () => {
+    setExpanded((v) => !v)
+    if (moduleCount === null) {
+      getModules(subject.id)
+        .then((data) => setModuleCount(data.modules?.length ?? 0))
+        .catch(() => {
+          // Non-critical — badge stays empty
+        })
+    }
+  }
+
   return (
     <div>
-      {/* Subject row — wraps the NavLink for active styling + expand trigger */}
+      {/* Subject row — NavLink for routing + expand toggle */}
       <div className="relative group flex items-center">
-        {/* NavLink provides the /subjects/:id navigation and active left-border styling */}
+        {/*
+          FIX: previously onClick called e.preventDefault() which blocked navigation.
+          Now we let NavLink handle routing normally and call handleExpand() separately.
+          Both navigation and tree expand/collapse happen together on click.
+        */}
         <NavLink
           to={`/subjects/${subject.id}`}
           className={({ isActive }) =>
@@ -151,18 +239,13 @@ function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
               isActive ? 'border-l-2 border-accent text-text-primary' : 'text-text-secondary',
             ].join(' ')
           }
-          onClick={(e) => {
-            // Also toggle expand when clicking the nav item
-            // (navigation happens; this just controls the tree state)
-            e.preventDefault()
-            setExpanded((v) => !v)
-          }}
+          onClick={handleExpand}
         >
           <span className="truncate flex-1 text-sm">{subject.name}</span>
 
-          {/* Module count badge — 0 for now; populated in modules task */}
+          {/* Module count badge — shows real count once fetched, blank until then */}
           <span className="font-mono text-xs bg-bg-subtle text-text-muted px-1.5 py-0.5 rounded-sm shrink-0">
-            0
+            {moduleCount !== null ? moduleCount : ''}
           </span>
 
           {/* Chevron */}
@@ -182,10 +265,10 @@ function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
         </button>
       </div>
 
-      {/* Expanded: module list placeholder — module fetching is a later task */}
+      {/* Expanded: real module list fetched from the API */}
       {expanded && (
         <div className="pl-6 pb-1">
-          <p className="text-text-muted text-xs font-mono py-1 px-2">No modules yet.</p>
+          <SubjectModuleList subject={subject} />
         </div>
       )}
     </div>

@@ -50,6 +50,47 @@ export const deleteSubject = (id: number): Promise<{ deleted: boolean } | { erro
 export { request }
 
 // ---------------------------------------------------------------------------
+// Modules
+// ---------------------------------------------------------------------------
+
+export interface Module {
+  id: number
+  subject_id: number
+  title: string
+  file_type: 'pdf' | 'docx'
+  created_at: string
+  /** Outputs already generated for this module, indexed by output_type. */
+  outputs: AiOutput[]
+}
+
+/** Fetch all modules for a subject, each with their associated outputs. */
+export const getModules = (subjectId: number): Promise<{ modules: Module[] }> =>
+  fetch(`/api/subjects/${subjectId}/modules`).then((r) => r.json())
+
+/**
+ * Upload a PDF or DOCX file as a new module under a subject.
+ * Uses multipart/form-data — do NOT set Content-Type header manually;
+ * the browser sets it with the correct multipart boundary.
+ */
+export const uploadModule = (
+  subjectId: number,
+  file: File,
+  title: string
+): Promise<{ module: { id: number; subject_id: number; title: string; file_type: string; created_at: string } }> => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('title', title)
+  return fetch(`/api/subjects/${subjectId}/modules/upload`, {
+    method: 'POST',
+    body: form,
+  }).then((r) => r.json())
+}
+
+/** Delete a module by id. */
+export const deleteModule = (id: number): Promise<{ deleted: boolean } | { error: string }> =>
+  fetch(`/api/modules/${id}`, { method: 'DELETE' }).then((r) => r.json())
+
+// ---------------------------------------------------------------------------
 // AI Outputs
 // ---------------------------------------------------------------------------
 

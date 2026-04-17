@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import DashboardPage from './pages/DashboardPage'
+import SubjectView from './pages/SubjectView'
+import ModuleView from './pages/ModuleView'
 
 export default function App() {
   return (
@@ -8,7 +10,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AppShell />}>
           <Route index element={<DashboardPage />} />
-          {/* Subject and Module routes added in later tasks */}
+          <Route path="/subjects/:subjectId" element={<SubjectView />} />
+          <Route path="/subjects/:subjectId/modules/:moduleId" element={<ModuleView />} />
         </Route>
       </Routes>
     </BrowserRouter>

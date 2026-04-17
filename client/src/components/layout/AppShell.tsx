@@ -83,11 +83,25 @@ interface Breadcrumb {
 }
 
 function buildBreadcrumb(pathname: string): Breadcrumb {
-  // Dashboard
+  // Dashboard — no breadcrumb
   if (pathname === '/') return {}
 
-  // /subjects/:id  →  show "Subject" (name resolved in Subject View task)
-  // /subjects/:id/modules/:moduleId  →  resolved in Module View task
-  // Return empty for now; real resolution happens when those routes are built.
+  // /subjects/:subjectId/modules/:moduleId
+  // Show Subject ID › Module ID. Real names come from ModuleView via router
+  // state — full name resolution is a follow-up task (PM: wire via context).
+  const moduleMatch = pathname.match(/^\/subjects\/(\d+)\/modules\/(\d+)/)
+  if (moduleMatch) {
+    return {
+      subject: `Subject ${moduleMatch[1]}`,
+      module: `Module ${moduleMatch[2]}`,
+    }
+  }
+
+  // /subjects/:subjectId
+  const subjectMatch = pathname.match(/^\/subjects\/(\d+)/)
+  if (subjectMatch) {
+    return { subject: `Subject ${subjectMatch[1]}` }
+  }
+
   return {}
 }
