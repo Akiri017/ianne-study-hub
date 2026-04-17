@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import SectionLabel from '../ui/SectionLabel'
+import WeakPointLog from '../right-panel/WeakPointLog'
 
 type PanelTab = 'WEAK POINTS' | 'TASKS'
 
@@ -10,7 +10,6 @@ interface RightPanelProps {
 /**
  * Toggleable right panel — 280px wide.
  * Houses two tabs: Weak Points and Tasks.
- * Tab content is placeholder until those features are implemented.
  */
 export default function RightPanel({ isOpen }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('WEAK POINTS')
@@ -37,14 +36,12 @@ export default function RightPanel({ isOpen }: RightPanelProps) {
         ))}
       </div>
 
-      {/* Tab content — placeholder; real content comes in later tasks */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <SectionLabel className="mb-3">{activeTab}</SectionLabel>
-        <p className="text-text-muted text-sm font-mono">
-          {activeTab === 'WEAK POINTS'
-            ? 'No weak points logged yet.'
-            : 'No tasks yet.'}
-        </p>
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === 'WEAK POINTS' && <WeakPointLog />}
+        {activeTab === 'TASKS' && (
+          <p className="text-text-muted text-sm font-mono p-4">No tasks yet.</p>
+        )}
       </div>
     </aside>
   )

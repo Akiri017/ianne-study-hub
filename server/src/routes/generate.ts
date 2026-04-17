@@ -8,7 +8,7 @@
 
 import { Router, Request, Response } from 'express'
 import db from '../db/index'
-import { streamGeneration, extractText } from '../services/claude'
+import { streamGeneration, extractText, generateText } from '../services/claude'
 
 // ── Type guards ────────────────────────────────────────────────────────────────
 
@@ -156,11 +156,118 @@ router.post('/', async (req: Request, res: Response) => {
 export default router
 
 // ── POST /api/generate/multi-module-quiz ─────────────────────────────────────
-// Stub — implemented in a separate task.
 
 export const multiModuleQuiz = Router()
-multiModuleQuiz.post('/multi-module-quiz', (_req: Request, res: Response) => {
-  res.status(501).json({ error: 'not implemented' })
+multiModuleQuiz.post('/multi-module-quiz', async (req: Request, res: Response) => {
+  const { module_ids, question_count, title } = req.body as {
+    module_ids?: unknown
+    question_count?: unknown
+    title?: unknown
+  }
+
+  // Validate module_ids: must be an array with at least 2 elements
+  if (!Array.isArray(module_ids) || module_ids.length < 2) {
+    res.status(400).json({ error: 'at least 2 module_ids required' })
+    return
+  }
+
+  // Validate question_count: must be a positive integer
+  const questionCount = Number(question_count)
+  if (!Number.isInteger(questionCount) || questionCount < 1) {
+    res.status(400).json({ error: 'question_count required' })
+    return
+  }
+
+  // Fetch all module rows from DB — verify each module_id exists
+  const moduleRows: ModuleRow[] = []
+  for (const id of module_ids) {
+    const row = db.prepare(
+      'SELECT id, subject_id, title, file_path, file_type, created_at FROM modules WHERE id = ?'
+    ).get(id) as ModuleRow | undefined
+
+    if (!row) {
+      res.status(404).json({ error: 'one or more modules not found' })
+      return
+    }
+    moduleRows.push(row)
+  }
+
+  // Extract text from each module file and combine with separators
+  let combinedText = ''
+  try {
+    for (const mod of moduleRows) {
+      const text = await extractText(mod.file_path, mod.file_type)
+      combinedText += `=== MODULE: ${mod.title} ===\n${text}\n\n`
+    }
+  } catch (err) {
+    console.error('[multi-module-quiz] extractText error:', err instanceof Error ? err.message : err)
+    res.status(422).json({ error: 'could not extract file content' })
+    return
+  }
+
+  // Call Gemini non-streaming to generate the quiz
+  let rawOutput: string
+  try {
+    rawOutput = await generateText({
+      text: combinedText,
+      outputType: 'quiz',
+      questionCount,
+    })
+  } catch (err) {
+    console.error('[multi-module-quiz] generateText error:', err instanceof Error ? err.message : err)
+    res.status(422).json({ error: 'failed to parse quiz output' })
+    return
+  }
+
+  // Parse the JSON response — must be an array of question objects
+  let questions: unknown[]
+  try {
+    // Strip optional markdown fences (```json ... ```) that Gemini may wrap around JSON
+    const cleaned = rawOutput.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const parsed = JSON.parse(cleaned) as unknown
+    if (!Array.isArray(parsed)) throw new Error('not an array')
+    questions = parsed
+  } catch {
+    res.status(422).json({ error: 'failed to parse quiz output' })
+    return
+  }
+
+  // Auto-generate title if not provided — truncate at 80 chars
+  const moduleNames = moduleRows.map((m) => m.title).join(', ')
+  const rawTitle = typeof title === 'string' && title.trim()
+    ? title.trim()
+    : `Quiz — ${moduleNames}`
+  const finalTitle = rawTitle.length > 80 ? rawTitle.slice(0, 77) + '...' : rawTitle
+
+  const now = new Date().toISOString()
+
+  // Insert into quizzes table
+  try {
+    db.prepare(
+      'INSERT INTO quizzes (title, question_count, questions_json, created_at) VALUES (?, ?, ?, ?)'
+    ).run(finalTitle, questions.length, JSON.stringify(questions), now)
+  } catch (err) {
+    console.error('[multi-module-quiz] DB insert error:', err instanceof Error ? err.message : err)
+    res.status(500).json({ error: 'failed to save quiz' })
+    return
+  }
+
+  const lastIdRow = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number }
+  const quizId = lastIdRow.id
+
+  // Insert one row per module into quiz_modules
+  try {
+    for (const mod of moduleRows) {
+      db.prepare(
+        'INSERT INTO quiz_modules (quiz_id, module_id) VALUES (?, ?)'
+      ).run(quizId, mod.id)
+    }
+  } catch (err) {
+    console.error('[multi-module-quiz] quiz_modules insert error:', err instanceof Error ? err.message : err)
+    // Quiz is already saved — partial quiz_modules failure is non-fatal; log and continue
+  }
+
+  res.status(201).json({ quiz_id: quizId, title: finalTitle, question_count: questions.length })
 })
 
 // ── POST /api/outputs/:outputId/regenerate ───────────────────────────────────

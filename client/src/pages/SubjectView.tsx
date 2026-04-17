@@ -12,8 +12,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import SectionLabel from '../components/ui/SectionLabel'
 import Button from '../components/ui/Button'
+import Badge from '../components/ui/Badge'
+import Modal from '../components/ui/Modal'
 import ModuleCard from '../components/modules/ModuleCard'
-import { getSubjects, getModules, uploadModule } from '../lib/api'
+import { getSubjects, getModules, uploadModule, createMultiModuleQuiz } from '../lib/api'
 import type { Module } from '../lib/api'
 
 // ---------------------------------------------------------------------------
@@ -210,6 +212,181 @@ function ModuleListSkeleton() {
 }
 
 // ---------------------------------------------------------------------------
+// MultiModuleQuizModal
+// ---------------------------------------------------------------------------
+
+interface MultiModuleQuizModalProps {
+  isOpen: boolean
+  onClose: () => void
+  subjectId: number
+  modules: Module[]
+  onQuizCreated: (quizId: number) => void
+}
+
+function MultiModuleQuizModal({
+  isOpen,
+  onClose,
+  modules,
+  onQuizCreated,
+}: MultiModuleQuizModalProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [questionCount, setQuestionCount] = useState(10)
+  const [title, setTitle] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Reset state when modal opens so stale selections don't linger
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedIds(new Set())
+      setQuestionCount(10)
+      setTitle('')
+      setError(null)
+    }
+  }, [isOpen])
+
+  const toggleModule = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const canGenerate = selectedIds.size >= 2 && !loading
+
+  const handleGenerate = async () => {
+    if (!canGenerate) return
+    setLoading(true)
+    setError(null)
+
+    try {
+      const result = await createMultiModuleQuiz({
+        module_ids: Array.from(selectedIds),
+        question_count: questionCount,
+        title: title.trim() || undefined,
+      })
+
+      if ('error' in result) {
+        setError(result.error)
+        return
+      }
+
+      onQuizCreated(result.quiz_id)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="md" title="Generate Multi-Module Quiz">
+      <div className="flex flex-col gap-6 p-6">
+        {/* Header */}
+        <div>
+          <h2 className="text-text-primary text-base font-semibold">Generate Multi-Module Quiz</h2>
+          <p className="text-text-muted text-xs font-mono mt-1">Select at least 2 modules to combine.</p>
+        </div>
+
+        {/* Module checklist */}
+        <div className="flex flex-col gap-2">
+          <SectionLabel>Modules</SectionLabel>
+          <div className="flex flex-col gap-2 max-h-52 overflow-y-auto pr-1">
+            {modules.map((mod) => (
+              <label
+                key={mod.id}
+                className="flex items-center gap-3 p-3 rounded-md border border-border-default bg-bg-subtle hover:border-border-strong cursor-pointer transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(mod.id)}
+                  onChange={() => toggleModule(mod.id)}
+                  className="accent-accent w-4 h-4 shrink-0"
+                />
+                <span className="text-text-primary text-sm flex-1 truncate">{mod.title}</span>
+                <Badge variant="default">{mod.file_type}</Badge>
+              </label>
+            ))}
+          </div>
+          {selectedIds.size < 2 && (
+            <p className="text-text-muted text-xs font-mono">
+              {selectedIds.size === 0
+                ? 'No modules selected.'
+                : '1 module selected — select at least one more.'}
+            </p>
+          )}
+        </div>
+
+        {/* Question count */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="mmq-question-count"
+            className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase"
+          >
+            Question Count
+          </label>
+          <input
+            id="mmq-question-count"
+            type="number"
+            min={1}
+            max={100}
+            value={questionCount}
+            onChange={(e) => setQuestionCount(Math.max(1, Math.min(100, Number(e.target.value))))}
+            className="h-9 px-3 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-border-strong transition-colors w-28"
+          />
+        </div>
+
+        {/* Optional title */}
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="mmq-title"
+            className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase"
+          >
+            Quiz Title (optional)
+          </label>
+          <input
+            id="mmq-title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Auto-generated if empty"
+            maxLength={80}
+            className="h-9 px-3 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-border-strong transition-colors"
+          />
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <p className="text-error text-xs font-mono">{error}</p>
+        )}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={!canGenerate}
+            loading={loading}
+          >
+            {loading ? 'Generating…' : 'Generate'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // SubjectView
 // ---------------------------------------------------------------------------
 
@@ -228,6 +405,8 @@ export default function SubjectView() {
   const [modules, setModules] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [quizModalOpen, setQuizModalOpen] = useState(false)
+  const [quizSuccessMsg, setQuizSuccessMsg] = useState<string | null>(null)
 
   const fetchModules = useCallback(async () => {
     if (!numericSubjectId) return
@@ -286,7 +465,19 @@ export default function SubjectView() {
 
       {/* Module list */}
       <div className="flex flex-col gap-4">
-        <SectionLabel>Modules</SectionLabel>
+        <div className="flex items-center justify-between">
+          <SectionLabel>Modules</SectionLabel>
+          {modules.length >= 2 && (
+            <Button variant="secondary" size="sm" onClick={() => setQuizModalOpen(true)}>
+              Generate Multi-Module Quiz
+            </Button>
+          )}
+        </div>
+
+        {/* Success message after quiz creation — auto-clears after 3s */}
+        {quizSuccessMsg && (
+          <p className="text-success text-xs font-mono">{quizSuccessMsg}</p>
+        )}
 
         {loading && <ModuleListSkeleton />}
 
@@ -304,6 +495,19 @@ export default function SubjectView() {
           <ModuleCard key={mod.id} module={mod} subjectId={numericSubjectId} />
         ))}
       </div>
+
+      {/* Multi-module quiz modal */}
+      <MultiModuleQuizModal
+        isOpen={quizModalOpen}
+        onClose={() => setQuizModalOpen(false)}
+        subjectId={numericSubjectId}
+        modules={modules}
+        onQuizCreated={(_quizId) => {
+          // Show a brief success message that auto-clears after 3 seconds
+          setQuizSuccessMsg('Quiz created!')
+          setTimeout(() => setQuizSuccessMsg(null), 3000)
+        }}
+      />
     </div>
   )
 }

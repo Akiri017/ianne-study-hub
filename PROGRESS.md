@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 4 complete
+**Status:** In progress — Session 5 complete
 
 ---
 
@@ -25,11 +25,12 @@
 
 **Session 4 — April 17, 2026** — AI Output Viewer + Subject/Module views complete. OutputPanel (three states, react-markdown, inline edit, RegenerateModal), ModuleView (tab bar with dot indicators), SubjectView (UploadZone, ModuleCard list), Sidebar NavLink fix + real module list. App is end-to-end usable: create subject → upload file → generate prescan/notes/quiz → view/edit/regenerate. `streamGeneration()` with SSE relay, prompt caching, 30s timeout, all three prompt types. Routes: POST /generate, POST /regenerate, GET+PATCH /outputs. Client `useStreamingOutput` hook. 100 tests passing.
 
+**Session 5 — April 17, 2026** — Weak Point Log + Multi-module Quiz complete. Weak Point Log: full CRUD backend (`GET/POST /subjects/:id/weak-points`, `PATCH/DELETE /weak-points/:id`), kanban RightPanel UI (Open/Patched/Confirmed sections, ErrorCard, ErrorCardModal with create/edit/delete). Multi-module quiz: `generateText()` non-streaming Gemini call, `POST /generate/multi-module-quiz` (validates module_ids ≥2, combines module text, auto-generates title), `MultiModuleQuizModal` in SubjectView, `createMultiModuleQuiz` API wrapper. 139 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
-- Multi-module quiz route returns 501 — separate task
-- Full quiz UI (question cards, MCQ/short-answer, FA session) — separate session (deferred from Session 4)
+- Full quiz UI (question cards, MCQ/short-answer, FA session) — separate session
 - Client-side `useStreamingOutput` hook has no unit tests — needs `@testing-library/react` + `jsdom` (not yet installed)
 
 ---
@@ -49,8 +50,8 @@
 - [x] AI output viewer — OutputPanel component: not-generated / streaming / generated states; react-markdown rendering; edit inline; regenerate with instructions
 - [x] Module View — tab bar (Pre-Scan / Notes / Quiz Generator); OutputPanel per tab
 - [x] Subject View — module list (ModuleCard), UploadZone, multi-module quiz trigger button
-- [ ] Multi-module quiz — `POST /generate/multi-module-quiz`; module selection modal; quizzes + quiz_modules rows saved
-- [ ] Weak Point Log — kanban board (Open / Patched / Confirmed); ErrorCard component; ErrorCardModal (create/edit/delete); CRUD routes
+- [x] Multi-module quiz — `POST /generate/multi-module-quiz`; module selection modal; quizzes + quiz_modules rows saved
+- [x] Weak Point Log — kanban board (Open / Patched / Confirmed); ErrorCard component; ErrorCardModal (create/edit/delete); CRUD routes
 - [x] App shell — Sidebar, Topbar, StatusBar, right panel toggle; routing (React Router)
 
 ### Should (high priority)
@@ -86,3 +87,6 @@
 | 2026-04-17 | Developer | OutputPanel + Module View + Subject View | Complete |
 | 2026-04-17 | QA | Session 4 verification | Complete — 100 tests passing, TS clean |
 | 2026-04-17 | CI/CD | Session 4 commit | Complete — 58b5e9d |
+| 2026-04-17 | Developer A | Weak Point Log backend + kanban UI | Complete |
+| 2026-04-17 | Developer B | Multi-module quiz + generateText() | Complete |
+| 2026-04-17 | QA | Session 5 verification | Complete — 139 tests passing, TS clean |

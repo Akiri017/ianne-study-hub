@@ -239,3 +239,50 @@ export async function streamGeneration(
 
 // Re-export extractText so generate routes only need one import.
 export { extractText }
+
+// ── Non-streaming generation ────────────────────────────────────────────────────
+
+/**
+ * Non-streaming Gemini call. Returns the full generated text as a string.
+ * Used for cases where we don't need to relay output to a client in real time
+ * (e.g. multi-module quiz generation with a modal spinner).
+ */
+export async function generateText(params: {
+  text: string
+  outputType: 'prescan' | 'notes' | 'quiz'
+  questionCount?: number
+  instructions?: string
+}): Promise<string> {
+  const { system, userMessage } = buildPrompt(params)
+  const url = `${GEMINI_BASE_URL}/${MODEL}:generateContent?key=${API_KEY}`
+
+  const controller = new AbortController()
+  // 60s for multi-module (larger input than single-module requests)
+  const timeout = setTimeout(() => controller.abort(), 60_000)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+        generationConfig: { maxOutputTokens: 8192 },
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 200)}`)
+    }
+
+    const data = await response.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    }
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    return text
+  } finally {
+    clearTimeout(timeout)
+  }
+}

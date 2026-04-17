@@ -39,6 +39,7 @@ vi.mock('../db/index', () => ({
 vi.mock('../services/claude', () => ({
   streamGeneration: mockStreamGeneration,
   extractText: mockExtractText,
+  generateText: vi.fn(),
 }))
 
 // ── Import after mocks ────────────────────────────────────────────────────────
@@ -299,18 +300,21 @@ describe('POST /api/modules/:moduleId/generate — happy path', () => {
   })
 })
 
-// ── POST /api/generate/multi-module-quiz — stub ───────────────────────────────
+// ── POST /api/generate/multi-module-quiz — basic smoke test ───────────────────
+// Full coverage for this route is in routes-multi-module-quiz.test.ts.
+// This test only verifies the route is mounted and rejects invalid input.
 
 describe('POST /api/generate/multi-module-quiz', () => {
-  it('returns 501 not implemented', async () => {
+  it('returns 400 (not 501) — stub has been replaced with real handler', async () => {
     const res = await fetch(`${baseUrl}/api/generate/multi-module-quiz`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    expect(res.status).toBe(501)
+    // Real handler validates module_ids first → 400
+    expect(res.status).toBe(400)
     const body = await res.json() as { error: string }
-    expect(body.error).toBe('not implemented')
+    expect(body.error).toBe('at least 2 module_ids required')
   })
 })
 

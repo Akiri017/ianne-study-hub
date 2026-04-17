@@ -151,3 +151,65 @@ export const regenerateOutput = (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instructions }),
   })
+
+// ---------------------------------------------------------------------------
+// Weak Points
+// ---------------------------------------------------------------------------
+
+export interface WeakPoint {
+  id: number
+  subject_id: number
+  topic: string
+  what_went_wrong: string
+  why_missed: string
+  fix: string
+  status: 'Open' | 'Patched' | 'Confirmed'
+  created_at: string
+  updated_at: string
+}
+
+export const getWeakPoints = (subjectId: number, status?: string): Promise<{ weak_points: WeakPoint[] }> => {
+  const url = status
+    ? `/api/subjects/${subjectId}/weak-points?status=${encodeURIComponent(status)}`
+    : `/api/subjects/${subjectId}/weak-points`
+  return fetch(url).then((r) => r.json())
+}
+
+export const createWeakPoint = (
+  subjectId: number,
+  data: Omit<WeakPoint, 'id' | 'subject_id' | 'created_at' | 'updated_at'>
+): Promise<{ weak_point: WeakPoint } | { error: string }> =>
+  fetch(`/api/subjects/${subjectId}/weak-points`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then((r) => r.json())
+
+export const updateWeakPoint = (
+  id: number,
+  data: Partial<Omit<WeakPoint, 'id' | 'subject_id' | 'created_at' | 'updated_at'>>
+): Promise<{ weak_point: { id: number; updated_at: string } } | { error: string }> =>
+  fetch(`/api/weak-points/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then((r) => r.json())
+
+export const deleteWeakPoint = (id: number): Promise<{ deleted: boolean } | { error: string }> =>
+  fetch(`/api/weak-points/${id}`, { method: 'DELETE' }).then((r) => r.json())
+
+// ---------------------------------------------------------------------------
+// Quizzes
+// ---------------------------------------------------------------------------
+
+/** Create a multi-module quiz synchronously. Returns quiz metadata or an error. */
+export const createMultiModuleQuiz = (params: {
+  module_ids: number[]
+  question_count: number
+  title?: string
+}): Promise<{ quiz_id: number; title: string; question_count: number } | { error: string }> =>
+  fetch('/api/generate/multi-module-quiz', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  }).then((r) => r.json())
