@@ -1,35 +1,16 @@
 /**
- * Unit tests — claude service (buildPrompt + streamGeneration).
+ * Unit tests — Gemini service (buildPrompt + streamGeneration).
  *
- * Strategy: vi.mock @anthropic-ai/sdk so we never hit the real API.
+ * Strategy: vi.stubGlobal('fetch', ...) so we never hit the real Gemini API.
  * streamGeneration is tested with a mock Express Response that collects
  * writes so we can assert on SSE wire format without a real HTTP server.
  *
  * buildPrompt is a pure function — no mocking needed.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ── Hoist mock references so they're available inside vi.mock factory ────────
-
-const mockStreamFn = vi.hoisted(() => vi.fn())
-
-// ── @anthropic-ai/sdk mock ───────────────────────────────────────────────────
-// Must use a regular function (not arrow) so `new Anthropic()` works as a constructor.
-// When a constructor function explicitly returns an object, JS uses that object.
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  default: function MockAnthropic(this: any) {
-    return {
-      messages: {
-        stream: mockStreamFn,
-      },
-    }
-  },
-}))
-
-// ── parser mock (prevents real fs/pdf-parse imports) ─────────────────────────
+// ── parser mock (prevents real fs/pdf-parse imports) ──────────────────────────
 
 vi.mock('../services/parser', () => ({
   extractText: vi.fn(),
@@ -40,26 +21,67 @@ vi.mock('../services/parser', () => ({
 import { buildPrompt, streamGeneration } from '../services/claude'
 import type { Response } from 'express'
 
-// ── Mock Response factory ─────────────────────────────────────────────────────
+// ── Global fetch mock ─────────────────────────────────────────────────────────
+// Replaced per-test via mockFetch.mockResolvedValueOnce(makeStreamResponse(...))
 
+const mockFetch = vi.fn()
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Builds a fake fetch Response whose body is a ReadableStream emitting the
+ * provided SSE lines. Mirrors what Gemini returns with ?alt=sse.
+ */
+function makeStreamResponse(sseLines: string[]): Response {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream({
+    start(controller) {
+      for (const line of sseLines) {
+        controller.enqueue(encoder.encode(line))
+      }
+      controller.close()
+    },
+  })
+  return new globalThis.Response(body, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+  }) as unknown as Response
+}
+
+/**
+ * Serialises a text chunk into the SSE line Gemini emits with ?alt=sse.
+ * Format: data: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
+ */
+function geminiSseLine(text: string): string {
+  return `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] })}\n\n`
+}
+
+/**
+ * Builds a mock Express Response that collects res.write() calls.
+ */
 function makeMockRes() {
   const writes: string[] = []
   return {
     setHeader: vi.fn(),
     flushHeaders: vi.fn(),
-    write: vi.fn((chunk: string) => {
-      writes.push(chunk)
-    }),
+    write: vi.fn((chunk: string) => { writes.push(chunk) }),
     end: vi.fn(),
     _writes: writes,
   }
 }
 
 beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch)
   vi.resetAllMocks()
+  // Re-stub after resetAllMocks clears the stub
+  vi.stubGlobal('fetch', mockFetch)
 })
 
-// ── buildPrompt ───────────────────────────────────────────────────────────────
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+// ── buildPrompt — prescan ─────────────────────────────────────────────────────
 
 describe('buildPrompt — prescan', () => {
   it('returns system and userMessage', () => {
@@ -96,6 +118,8 @@ describe('buildPrompt — prescan', () => {
   })
 })
 
+// ── buildPrompt — notes ───────────────────────────────────────────────────────
+
 describe('buildPrompt — notes', () => {
   it('system prompt references bottom-up concept ordering', () => {
     const { system } = buildPrompt({ text: 'x', outputType: 'notes' })
@@ -112,6 +136,8 @@ describe('buildPrompt — notes', () => {
     expect(system).toContain('ambiguous')
   })
 })
+
+// ── buildPrompt — quiz ────────────────────────────────────────────────────────
 
 describe('buildPrompt — quiz', () => {
   it('includes question count in both system and userMessage', () => {
@@ -151,14 +177,11 @@ describe('buildPrompt — quiz', () => {
   })
 })
 
-// ── streamGeneration ──────────────────────────────────────────────────────────
+// ── streamGeneration — SSE headers ───────────────────────────────────────────
 
 describe('streamGeneration — SSE headers', () => {
-  it('sets Content-Type text/event-stream before any writes', async () => {
-    async function* events() {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } }
-    }
-    mockStreamFn.mockReturnValueOnce(events())
+  it('sets Content-Type text/event-stream, Cache-Control, and Connection before writing', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([geminiSseLine('Hi')]))
 
     const res = makeMockRes()
     await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
@@ -170,13 +193,60 @@ describe('streamGeneration — SSE headers', () => {
   })
 })
 
-describe('streamGeneration — chunk writing', () => {
-  it('writes each text chunk as a JSON-stringified SSE data line', async () => {
-    async function* events() {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello ' } }
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'world' } }
+// ── streamGeneration — Gemini request format ──────────────────────────────────
+
+describe('streamGeneration — Gemini request format', () => {
+  it('calls fetch with POST method and JSON content-type', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([]))
+
+    const res = makeMockRes()
+    await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
+
+    expect(mockFetch).toHaveBeenCalledOnce()
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('streamGenerateContent')
+    expect(url).toContain('alt=sse')
+    expect(options.method).toBe('POST')
+    expect((options.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+
+  it('sends system_instruction and user contents in the request body', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([]))
+
+    const res = makeMockRes()
+    await streamGeneration(res as unknown as Response, { text: 'my module text', outputType: 'prescan' })
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(options.body as string) as {
+      system_instruction: { parts: Array<{ text: string }> }
+      contents: Array<{ role: string; parts: Array<{ text: string }> }>
     }
-    mockStreamFn.mockReturnValueOnce(events())
+
+    expect(body.system_instruction.parts[0].text).toBeTruthy()
+    expect(body.contents[0].role).toBe('user')
+    expect(body.contents[0].parts[0].text).toContain('my module text')
+  })
+
+  it('includes maxOutputTokens in generationConfig', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([]))
+
+    const res = makeMockRes()
+    await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'notes' })
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(options.body as string) as { generationConfig: { maxOutputTokens: number } }
+    expect(body.generationConfig.maxOutputTokens).toBeGreaterThan(0)
+  })
+})
+
+// ── streamGeneration — chunk writing ─────────────────────────────────────────
+
+describe('streamGeneration — chunk writing', () => {
+  it('extracts text from Gemini chunks and writes as JSON-stringified SSE lines', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([
+      geminiSseLine('Hello '),
+      geminiSseLine('world'),
+    ]))
 
     const res = makeMockRes()
     await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
@@ -185,35 +255,41 @@ describe('streamGeneration — chunk writing', () => {
     expect(res._writes).toContain(`data: ${JSON.stringify('world')}\n\n`)
   })
 
-  it('ignores non-text-delta events without writing them', async () => {
-    async function* events() {
-      // These should be silently skipped
-      yield { type: 'message_start', message: {} }
-      yield { type: 'content_block_start', content_block: { type: 'text' } }
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Only me' } }
-      yield { type: 'message_stop' }
-    }
-    mockStreamFn.mockReturnValueOnce(events())
+  it('skips lines that are not valid Gemini SSE data', async () => {
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([
+      'data: [DONE]\n\n',           // skip — [DONE] sentinel
+      'data: not-json\n\n',         // skip — malformed
+      geminiSseLine('Real chunk'),  // emit
+      '\n',                         // skip — empty line
+    ]))
 
     const res = makeMockRes()
-    const result = await streamGeneration(res as unknown as Response, {
-      text: 'x',
-      outputType: 'prescan',
-    })
+    const result = await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
 
-    // Only one chunk write + DONE sentinel
     const chunkWrites = res._writes.filter((w) => w !== 'data: [DONE]\n\n')
     expect(chunkWrites).toHaveLength(1)
-    expect(result).toBe('Only me')
+    expect(result).toBe('Real chunk')
+  })
+
+  it('skips Gemini events where text field is missing', async () => {
+    const noText = `data: ${JSON.stringify({ candidates: [{ content: { parts: [] } }] })}\n\n`
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([
+      noText,
+      geminiSseLine('Valid'),
+    ]))
+
+    const res = makeMockRes()
+    const result = await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
+
+    expect(result).toBe('Valid')
   })
 })
 
+// ── streamGeneration — done sentinel ─────────────────────────────────────────
+
 describe('streamGeneration — done sentinel', () => {
   it('writes [DONE] sentinel and calls res.end() on success', async () => {
-    async function* events() {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Complete' } }
-    }
-    mockStreamFn.mockReturnValueOnce(events())
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([geminiSseLine('Done text')]))
 
     const res = makeMockRes()
     await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
@@ -223,29 +299,37 @@ describe('streamGeneration — done sentinel', () => {
   })
 
   it('accumulates and returns the full generated content', async () => {
-    async function* events() {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Part1 ' } }
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Part2' } }
-    }
-    mockStreamFn.mockReturnValueOnce(events())
+    mockFetch.mockResolvedValueOnce(makeStreamResponse([
+      geminiSseLine('Part1 '),
+      geminiSseLine('Part2'),
+    ]))
 
     const res = makeMockRes()
-    const result = await streamGeneration(res as unknown as Response, {
-      text: 'x',
-      outputType: 'notes',
-    })
+    const result = await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'notes' })
 
     expect(result).toBe('Part1 Part2')
   })
 })
 
+// ── streamGeneration — error handling ────────────────────────────────────────
+
 describe('streamGeneration — error handling', () => {
-  it('writes SSE error event and ends response when stream throws', async () => {
-    mockStreamFn.mockReturnValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        throw new Error('Claude API failure')
-      },
+  it('writes SSE error event and ends response when fetch throws', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network failure'))
+
+    const res = makeMockRes()
+    await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
+
+    const errorWrite = res._writes.find((w) => w.includes('"error"'))
+    expect(errorWrite).toBeDefined()
+    expect(res.end).toHaveBeenCalled()
+  })
+
+  it('writes SSE error event when Gemini returns a non-200 status', async () => {
+    const errorResponse = new globalThis.Response('{"error":"quota exceeded"}', {
+      status: 429,
     })
+    mockFetch.mockResolvedValueOnce(errorResponse)
 
     const res = makeMockRes()
     await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
@@ -256,11 +340,7 @@ describe('streamGeneration — error handling', () => {
   })
 
   it('does NOT write [DONE] sentinel when stream errors', async () => {
-    mockStreamFn.mockReturnValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        throw new Error('failure')
-      },
-    })
+    mockFetch.mockRejectedValueOnce(new Error('failure'))
 
     const res = makeMockRes()
     await streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
@@ -268,31 +348,10 @@ describe('streamGeneration — error handling', () => {
     expect(res._writes).not.toContain('data: [DONE]\n\n')
   })
 
-  it('returns accumulated content from before the error on mid-stream failure', async () => {
-    async function* events() {
-      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Partial ' } }
-      throw new Error('mid-stream failure')
-    }
-    mockStreamFn.mockReturnValueOnce(events())
-
-    const res = makeMockRes()
-    const result = await streamGeneration(res as unknown as Response, {
-      text: 'x',
-      outputType: 'prescan',
-    })
-
-    expect(result).toBe('Partial ')
-  })
-
   it('does not rethrow errors (caller safety net)', async () => {
-    mockStreamFn.mockReturnValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        throw new Error('should not propagate')
-      },
-    })
+    mockFetch.mockRejectedValueOnce(new Error('should not propagate'))
 
     const res = makeMockRes()
-    // Must resolve, not reject
     await expect(
       streamGeneration(res as unknown as Response, { text: 'x', outputType: 'prescan' })
     ).resolves.toBeDefined()

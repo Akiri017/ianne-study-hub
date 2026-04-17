@@ -1,27 +1,47 @@
 /**
- * Claude API service — prompt assembly and SSE streaming relay.
+ * Gemini API service — prompt assembly and SSE streaming relay.
  *
- * All Claude API calls go through this module. It is the only place in the
- * server that imports from @anthropic-ai/sdk. Prompt text is never logged.
+ * Uses the Vertex AI REST endpoint directly via Node's built-in fetch.
+ * No SDK dependency — matches the curl-style API the project uses.
+ *
+ * External interface is identical to the previous Anthropic implementation:
+ * streamGeneration() and buildPrompt() signatures are unchanged so all
+ * callers (routes/generate.ts) require zero modification.
+ *
+ * Prompt text is never logged.
  */
 
-import Anthropic from '@anthropic-ai/sdk'
 import type { Response } from 'express'
 import { extractText } from './parser'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+// ── Config ─────────────────────────────────────────────────────────────────────
 
-// Model is env-configurable so different environments can override without code changes.
-// Defaults to the project-standard Sonnet 4.6 per CLAUDE.md.
-const MODEL = process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6'
+const API_KEY = process.env.GOOGLE_API_KEY
+const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash'
 
-// ── Prompt builders ────────────────────────────────────────────────────────────
+// Vertex AI "publishers/google/models" endpoint — works with a Google AI Studio
+// API key (obtained from console.cloud.google.com/vertex-ai/studio).
+// ?alt=sse tells the API to return Server-Sent Events instead of a raw JSON array,
+// which is the same wire format our client already parses.
+const GEMINI_BASE_URL = 'https://aiplatform.googleapis.com/v1/publishers/google/models'
+
+// ── Gemini response shape (partial — only the fields we read) ──────────────────
+
+interface GeminiChunk {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>
+    }
+  }>
+}
+
+// ── Prompt builders ─────────────────────────────────────────────────────────────
 
 /**
  * Returns the assembled { system, userMessage } for a given output type.
  * Split from streamGeneration so each builder can be unit-tested in isolation.
+ * Prompts are identical to the previous implementation — only the delivery
+ * mechanism (Gemini vs Anthropic) has changed.
  */
 export function buildPrompt(params: {
   text: string
@@ -32,7 +52,7 @@ export function buildPrompt(params: {
   const { text, outputType, questionCount, instructions } = params
 
   // Append any regeneration instructions to the user message so the system
-  // prompt stays stable (required for prompt caching to be effective).
+  // prompt stays stable across regenerations.
   const userSuffix = instructions ? `\n\nAdditional instructions: ${instructions}` : ''
 
   switch (outputType) {
@@ -93,18 +113,21 @@ Each question object must have: id (UUID v4), type ("mcq" or "short_answer"), qu
 Extract questions from all parts of the module, not just the most prominent sections.`
 }
 
-// ── SSE streaming ──────────────────────────────────────────────────────────────
+// ── SSE streaming ───────────────────────────────────────────────────────────────
 
 /**
- * Streams a Claude generation to the Express response as Server-Sent Events.
+ * Streams a Gemini generation to the Express response as Server-Sent Events.
  *
- * Caller must not have sent any headers before calling this — we set
- * Content-Type: text/event-stream here. Returns the full accumulated
- * content so the caller can persist it to the DB after the stream ends.
+ * Calls the Vertex AI streamGenerateContent endpoint with ?alt=sse so the
+ * upstream response is already in SSE format. We parse each event, extract
+ * the text chunk, and re-emit it to our client in the same format the
+ * useStreamingOutput hook already knows how to consume:
  *
- * Error handling: if Claude errors after headers are sent, we write a final
- * SSE error event and call res.end(). We do NOT rethrow so Express's error
- * handler never sees a headers-already-sent crash.
+ *   data: "chunk text"\n\n   ← JSON-stringified string per chunk
+ *   data: [DONE]\n\n         ← sentinel on completion
+ *   data: {"error":"..."}\n\n ← sentinel on failure
+ *
+ * Returns the full accumulated content so the caller can persist it to the DB.
  */
 export async function streamGeneration(
   res: Response,
@@ -130,49 +153,77 @@ export async function streamGeneration(
   const timeout = setTimeout(() => controller.abort(), 30_000)
 
   try {
-    // The standard SDK types don't include cache_control on TextBlockParam —
-    // it lives in the beta/prompt-caching namespace. We cast through unknown so
-    // the runtime call works (the API accepts it on the regular endpoint) while
-    // the TypeScript compiler stays happy. See @anthropic-ai/sdk §Prompt Caching.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const systemWithCache: any = [
-      {
-        type: 'text',
-        text: system,
-        cache_control: { type: 'ephemeral' },
-      },
-    ]
+    const url = `${GEMINI_BASE_URL}/${MODEL}:streamGenerateContent?key=${API_KEY}&alt=sse`
 
-    const stream = anthropic.messages.stream(
-      {
-        model: MODEL,
-        max_tokens: 8192,
-        // Prompt caching on the system prompt keeps costs down when the same
-        // module is regenerated multiple times (e.g. with different instructions).
-        system: systemWithCache,
-        messages: [{ role: 'user', content: userMessage }],
-      },
-      { signal: controller.signal }
-    )
+    const upstream = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // Gemini separates system instructions from user content at the top level.
+        system_instruction: {
+          parts: [{ text: system }],
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: userMessage }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 8192,
+        },
+      }),
+      signal: controller.signal,
+    })
 
-    for await (const event of stream) {
-      if (
-        event.type === 'content_block_delta' &&
-        event.delta.type === 'text_delta'
-      ) {
-        const chunk = event.delta.text
-        accumulated += chunk
-        // SSE wire format: each chunk is a JSON-stringified string so the
-        // client can safely parse it without worrying about newlines in text.
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+    if (!upstream.ok || !upstream.body) {
+      // Read the error body for logging (never log user content).
+      const errText = await upstream.text().catch(() => '')
+      throw new Error(`Gemini API error ${upstream.status}: ${errText.slice(0, 200)}`)
+    }
+
+    // Read the SSE stream from Gemini and relay chunks to our client.
+    const reader = upstream.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Split on newlines but keep any incomplete final line in the buffer.
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6).trim()
+
+        // Gemini may or may not send [DONE] — we handle the stream-end via
+        // the reader loop above, so just skip it if present.
+        if (data === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(data) as GeminiChunk
+          const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text
+
+          if (typeof text === 'string' && text.length > 0) {
+            accumulated += text
+            // Re-emit to client in the same format useStreamingOutput expects.
+            res.write(`data: ${JSON.stringify(text)}\n\n`)
+          }
+        } catch {
+          // Malformed JSON line (e.g. Gemini metadata-only events) — skip silently.
+        }
       }
     }
   } catch (err) {
-    // Never log module content — only the error message itself.
-    console.error('[claude] streamGeneration error:', err instanceof Error ? err.message : err)
+    // Never log module content — only the error message.
+    console.error('[gemini] streamGeneration error:', err instanceof Error ? err.message : err)
 
-    // Write a final error event so the client knows the stream aborted cleanly
-    // rather than timing out on an open connection.
+    // Write a final error event so the client knows the stream aborted cleanly.
     res.write(`data: ${JSON.stringify({ error: 'generation failed' })}\n\n`)
     res.end()
     return accumulated
