@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import WeakPointLog from '../right-panel/WeakPointLog'
+import TaskTracker from '../right-panel/TaskTracker'
 
 type PanelTab = 'WEAK POINTS' | 'TASKS'
 
@@ -39,9 +40,7 @@ export default function RightPanel({ isOpen }: RightPanelProps) {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'WEAK POINTS' && <WeakPointLog />}
-        {activeTab === 'TASKS' && (
-          <p className="text-text-muted text-sm font-mono p-4">No tasks yet.</p>
-        )}
+        {activeTab === 'TASKS' && <TaskTracker />}
       </div>
     </aside>
   )

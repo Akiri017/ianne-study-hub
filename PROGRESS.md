@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 5 complete
+**Status:** In progress — Session 6 complete
 
 ---
 
@@ -27,10 +27,12 @@
 
 **Session 5 — April 17, 2026** — Weak Point Log + Multi-module Quiz complete. Weak Point Log: full CRUD backend (`GET/POST /subjects/:id/weak-points`, `PATCH/DELETE /weak-points/:id`), kanban RightPanel UI (Open/Patched/Confirmed sections, ErrorCard, ErrorCardModal with create/edit/delete). Multi-module quiz: `generateText()` non-streaming Gemini call, `POST /generate/multi-module-quiz` (validates module_ids ≥2, combines module text, auto-generates title), `MultiModuleQuizModal` in SubjectView, `createMultiModuleQuiz` API wrapper. 139 tests passing. TS clean.
 
+**Session 6 — April 17, 2026** — Task Tracker + Dashboard live data complete. Task Tracker: full CRUD backend (`GET/POST /subjects/:id/tasks`, `GET/PATCH/DELETE /tasks/:id`), `TaskTracker` component in TASKS tab (add form with subject select, checkbox toggle with optimistic update, overdue styling, delete). Dashboard: `GET /api/subjects/stats` endpoint (open weak points, total modules, last 5 recent modules via JOIN), live data wired into DashboardPage (loading skeletons, stat cards, recent modules list with links). 162 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
-- Full quiz UI (question cards, MCQ/short-answer, FA session) — separate session
+- Full quiz UI (question cards, MCQ/short-answer, FA session) — Session 7
 - Client-side `useStreamingOutput` hook has no unit tests — needs `@testing-library/react` + `jsdom` (not yet installed)
 
 ---
@@ -40,7 +42,7 @@
 ### Must (required for v1)
 - [x] Project scaffolding — monorepo setup (client + server + shared), Vite config, Tailwind, Express bootstrap, SQLite init, `.env` wiring
 - [x] Database schema — run `schema.sql`, all tables: subjects, modules, ai_outputs, quizzes, quiz_modules, fa_sessions, weak_points, tasks
-- [ ] Subject CRUD — `GET/POST/DELETE /subjects`; sidebar subject tree renders subjects, create/delete works
+- [x] Subject CRUD — `GET/POST/DELETE /subjects`; sidebar subject tree renders subjects, create/delete works
 - [x] Module upload — `POST /subjects/:id/modules/upload`; Multer config (20MB, PDF+DOCX only); file saved to `/uploads`; module row inserted
 - [x] File parsing — pdf-parse + mammoth text extraction service (`server/src/services/parser.ts`)
 - [x] Claude proxy + SSE streaming — prompt assembly service, SSE relay to client, `useStreamingOutput` hook
@@ -55,10 +57,10 @@
 - [x] App shell — Sidebar, Topbar, StatusBar, right panel toggle; routing (React Router)
 
 ### Should (high priority)
-- [ ] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence
+- [ ] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence  ← Session 7
 - [ ] Reviewer export — `POST /subjects/:id/reviewer/export`; Claude generates reviewer from Confirmed weak points; DOCX + PDF download via docx + PDFKit
-- [ ] Task Tracker — task list + calendar view; TaskForm; CRUD routes (`/tasks`, `/subjects/:id/tasks`)
-- [ ] Dashboard — open weak point count, upcoming deadlines, recent modules
+- [x] Task Tracker — task list + calendar view; TaskForm; CRUD routes (`/tasks`, `/subjects/:id/tasks`)
+- [x] Dashboard — open weak point count, upcoming deadlines, recent modules
 
 ### Could (if time allows)
 - [ ] Study session timer with phase labels (Pre-scan, Study, FA, etc.)
@@ -90,3 +92,6 @@
 | 2026-04-17 | Developer A | Weak Point Log backend + kanban UI | Complete |
 | 2026-04-17 | Developer B | Multi-module quiz + generateText() | Complete |
 | 2026-04-17 | QA | Session 5 verification | Complete — 139 tests passing, TS clean |
+| 2026-04-17 | Developer | Task Tracker CRUD + TaskTracker UI | Complete |
+| 2026-04-17 | Developer | Dashboard live data + /stats endpoint | Complete |
+| 2026-04-17 | QA | Session 6 verification | Complete — 162 tests passing, TS clean |

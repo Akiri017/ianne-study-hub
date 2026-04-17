@@ -4,6 +4,39 @@ import db from '../db/index'
 const router = Router()
 
 // ---------------------------------------------------------------------------
+// GET /api/subjects/stats
+// Returns aggregate counts and recent modules for the Dashboard.
+// Must be declared before any /:id routes to avoid param collision.
+// ---------------------------------------------------------------------------
+router.get('/stats', (_req: Request, res: Response) => {
+  try {
+    const { count: open_weak_points } = db.prepare(
+      "SELECT COUNT(*) as count FROM weak_points WHERE status = 'Open'"
+    ).get() as { count: number }
+
+    const { count: total_modules } = db.prepare(
+      'SELECT COUNT(*) as count FROM modules'
+    ).get() as { count: number }
+
+    const recent_modules = db.prepare(`
+      SELECT m.id, m.title, m.subject_id, s.name as subject_name, m.file_type, m.created_at
+      FROM modules m
+      LEFT JOIN subjects s ON s.id = m.subject_id
+      ORDER BY m.created_at DESC
+      LIMIT 5
+    `).all() as Array<{
+      id: number; title: string; subject_id: number
+      subject_name: string | null; file_type: string; created_at: string
+    }>
+
+    res.json({ open_weak_points, total_modules, recent_modules })
+  } catch (err) {
+    console.error('[subjects] GET /stats error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // GET /api/subjects
 // Returns all subjects ordered by creation time ascending.
 // ---------------------------------------------------------------------------

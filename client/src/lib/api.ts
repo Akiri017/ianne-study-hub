@@ -202,6 +202,66 @@ export const deleteWeakPoint = (id: number): Promise<{ deleted: boolean } | { er
 // Quizzes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Tasks
+// ---------------------------------------------------------------------------
+
+export interface Task {
+  id: number
+  subject_id: number | null
+  title: string
+  due_date: string // YYYY-MM-DD
+  completed: boolean
+  subject_name?: string | null
+}
+
+export const getTasks = (): Promise<{ tasks: Task[] }> =>
+  fetch('/api/tasks').then((r) => r.json())
+
+export const createTask = (
+  data: { title: string; due_date: string; subject_id?: number }
+): Promise<{ task: Task } | { error: string }> =>
+  request('/tasks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const updateTask = (
+  id: number,
+  data: Partial<{ title: string; due_date: string; completed: boolean; subject_id: number | null }>
+): Promise<{ task: { id: number } } | { error: string }> =>
+  request(`/tasks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+
+export const deleteTask = (id: number): Promise<{ deleted: boolean } | { error: string }> =>
+  request(`/tasks/${id}`, { method: 'DELETE' })
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
+export interface DashboardStats {
+  open_weak_points: number
+  total_modules: number
+  recent_modules: Array<{
+    id: number
+    title: string
+    subject_id: number
+    subject_name: string | null
+    file_type: 'pdf' | 'docx'
+    created_at: string
+  }>
+}
+
+export const getDashboardStats = (): Promise<DashboardStats> =>
+  fetch('/api/subjects/stats').then((r) => r.json())
+
+// ---------------------------------------------------------------------------
+// Quizzes
+// ---------------------------------------------------------------------------
+
 /** Create a multi-module quiz synchronously. Returns quiz metadata or an error. */
 export const createMultiModuleQuiz = (params: {
   module_ids: number[]
