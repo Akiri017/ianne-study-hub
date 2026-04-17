@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 6 complete
+**Status:** In progress — Session 7 complete
 
 ---
 
@@ -29,10 +29,12 @@
 
 **Session 6 — April 17, 2026** — Task Tracker + Dashboard live data complete. Task Tracker: full CRUD backend (`GET/POST /subjects/:id/tasks`, `GET/PATCH/DELETE /tasks/:id`), `TaskTracker` component in TASKS tab (add form with subject select, checkbox toggle with optimistic update, overdue styling, delete). Dashboard: `GET /api/subjects/stats` endpoint (open weak points, total modules, last 5 recent modules via JOIN), live data wired into DashboardPage (loading skeletons, stat cards, recent modules list with links). 162 tests passing. TS clean.
 
+**Session 7 — April 17, 2026** — FA Session Runner complete. Backend: real `GET/POST/PATCH` quiz routes + `GET /subjects/:id/quizzes`; `fa_sessions` persisted on completion. Frontend: `QuizRunner` page (`/quizzes/:quizId/run`) — intro screen, progress bar, MCQ click-to-answer with correct/incorrect reveal, short-answer self-mark, final score screen with "Log Weak Point" buttons per wrong answer (pre-filled WeakPointModal). Quiz list added to SubjectView with Run buttons. 176 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
-- Full quiz UI (question cards, MCQ/short-answer, FA session) — Session 7
+- Single-module quiz raw JSON in OutputPanel — full runner integration deferred
 - Client-side `useStreamingOutput` hook has no unit tests — needs `@testing-library/react` + `jsdom` (not yet installed)
 
 ---
@@ -57,7 +59,7 @@
 - [x] App shell — Sidebar, Topbar, StatusBar, right panel toggle; routing (React Router)
 
 ### Should (high priority)
-- [ ] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence  ← Session 7
+- [x] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence
 - [ ] Reviewer export — `POST /subjects/:id/reviewer/export`; Claude generates reviewer from Confirmed weak points; DOCX + PDF download via docx + PDFKit
 - [x] Task Tracker — task list + calendar view; TaskForm; CRUD routes (`/tasks`, `/subjects/:id/tasks`)
 - [x] Dashboard — open weak point count, upcoming deadlines, recent modules
@@ -95,3 +97,5 @@
 | 2026-04-17 | Developer | Task Tracker CRUD + TaskTracker UI | Complete |
 | 2026-04-17 | Developer | Dashboard live data + /stats endpoint | Complete |
 | 2026-04-17 | QA | Session 6 verification | Complete — 162 tests passing, TS clean |
+| 2026-04-17 | Developer | FA Session Runner — backend routes + QuizRunner UI | Complete |
+| 2026-04-17 | QA | Session 7 verification | Complete — 176 tests passing, TS clean |

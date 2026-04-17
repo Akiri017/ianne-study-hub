@@ -9,14 +9,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useLocation } from 'react-router-dom'
+import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import SectionLabel from '../components/ui/SectionLabel'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import ModuleCard from '../components/modules/ModuleCard'
-import { getSubjects, getModules, uploadModule, createMultiModuleQuiz } from '../lib/api'
-import type { Module } from '../lib/api'
+import { getSubjects, getModules, uploadModule, createMultiModuleQuiz, getSubjectQuizzes } from '../lib/api'
+import type { Module, QuizSummary } from '../lib/api'
 
 // ---------------------------------------------------------------------------
 // UploadZone
@@ -393,6 +393,7 @@ function MultiModuleQuizModal({
 export default function SubjectView() {
   const { subjectId } = useParams<{ subjectId: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const numericSubjectId = Number(subjectId)
 
@@ -407,6 +408,8 @@ export default function SubjectView() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [quizModalOpen, setQuizModalOpen] = useState(false)
   const [quizSuccessMsg, setQuizSuccessMsg] = useState<string | null>(null)
+  const [quizzes, setQuizzes] = useState<QuizSummary[]>([])
+  const [quizzesLoading, setQuizzesLoading] = useState(true)
 
   const fetchModules = useCallback(async () => {
     if (!numericSubjectId) return
@@ -438,6 +441,22 @@ export default function SubjectView() {
   useEffect(() => {
     fetchModules()
   }, [fetchModules])
+
+  const fetchQuizzes = useCallback(async () => {
+    if (!numericSubjectId) return
+    try {
+      const data = await getSubjectQuizzes(numericSubjectId)
+      setQuizzes(data.quizzes ?? [])
+    } catch {
+      // Non-critical — quiz list stays empty
+    } finally {
+      setQuizzesLoading(false)
+    }
+  }, [numericSubjectId])
+
+  useEffect(() => {
+    fetchQuizzes()
+  }, [fetchQuizzes])
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-8">
@@ -496,6 +515,31 @@ export default function SubjectView() {
         ))}
       </div>
 
+      {/* Quizzes section */}
+      {(quizzesLoading || quizzes.length > 0) && (
+        <div className="flex flex-col gap-4">
+          <SectionLabel>Quizzes</SectionLabel>
+          {quizzesLoading && (
+            <div className="flex flex-col gap-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-12 rounded-md bg-bg-elevated animate-pulse" />
+              ))}
+            </div>
+          )}
+          {!quizzesLoading && quizzes.map((quiz) => (
+            <div key={quiz.id} className="flex items-center gap-4 px-4 py-3 bg-bg-surface border border-border-default rounded-md">
+              <div className="flex-1 min-w-0">
+                <p className="text-text-primary text-sm truncate">{quiz.title}</p>
+                <p className="text-text-muted text-xs font-mono">{quiz.question_count} questions · {quiz.created_at.slice(0, 10)}</p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => navigate(`/quizzes/${quiz.id}/run`)}>
+                Run
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Multi-module quiz modal */}
       <MultiModuleQuizModal
         isOpen={quizModalOpen}
@@ -503,9 +547,9 @@ export default function SubjectView() {
         subjectId={numericSubjectId}
         modules={modules}
         onQuizCreated={(_quizId) => {
-          // Show a brief success message that auto-clears after 3 seconds
           setQuizSuccessMsg('Quiz created!')
           setTimeout(() => setQuizSuccessMsg(null), 3000)
+          fetchQuizzes()
         }}
       />
     </div>

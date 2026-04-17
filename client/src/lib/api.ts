@@ -259,6 +259,68 @@ export const getDashboardStats = (): Promise<DashboardStats> =>
   fetch('/api/subjects/stats').then((r) => r.json())
 
 // ---------------------------------------------------------------------------
+// Quizzes & FA Sessions
+// ---------------------------------------------------------------------------
+
+export interface QuizQuestion {
+  id: string
+  type: 'mcq' | 'short_answer'
+  question: string
+  choices?: string[]
+  answer: string
+  topic: string
+}
+
+export interface Quiz {
+  id: number
+  title: string
+  question_count: number
+  questions: QuizQuestion[]
+  created_at: string
+}
+
+export interface QuizSummary {
+  id: number
+  title: string
+  question_count: number
+  created_at: string
+}
+
+export interface FaSession {
+  id: number
+  quiz_id: number
+  score: number
+  total: number
+  answers_json: string
+  completed_at: string | null
+}
+
+export interface SessionAnswer {
+  question_id: string
+  user_answer: string
+  correct: boolean
+}
+
+export const getQuiz = (id: number): Promise<{ quiz: Quiz }> =>
+  fetch(`/api/quizzes/${id}`).then((r) => r.json())
+
+export const getSubjectQuizzes = (subjectId: number): Promise<{ quizzes: QuizSummary[] }> =>
+  fetch(`/api/subjects/${subjectId}/quizzes`).then((r) => r.json())
+
+export const createSession = (quizId: number): Promise<{ session: FaSession }> =>
+  request(`/quizzes/${quizId}/sessions`, { method: 'POST', body: '{}' })
+
+export const completeSession = (
+  quizId: number,
+  sessionId: number,
+  data: { score: number; answers: SessionAnswer[] }
+): Promise<{ session: FaSession }> =>
+  request(`/quizzes/${quizId}/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+
+// ---------------------------------------------------------------------------
 // Quizzes
 // ---------------------------------------------------------------------------
 
