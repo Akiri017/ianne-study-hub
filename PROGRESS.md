@@ -31,6 +31,8 @@
 
 **Session 7 — April 17, 2026** — FA Session Runner complete. Backend: real `GET/POST/PATCH` quiz routes + `GET /subjects/:id/quizzes`; `fa_sessions` persisted on completion. Frontend: `QuizRunner` page (`/quizzes/:quizId/run`) — intro screen, progress bar, MCQ click-to-answer with correct/incorrect reveal, short-answer self-mark, final score screen with "Log Weak Point" buttons per wrong answer (pre-filled WeakPointModal). Quiz list added to SubjectView with Run buttons. 176 tests passing. TS clean.
 
+**Session 8 — April 17, 2026** — Google AI Studio migration complete. Migrated `claude.ts` from raw Vertex AI fetch to `@google/genai` SDK (`GoogleGenAI`, `generateContentStream`, `generateContent`). Added LaTeX prohibition + Markdown heading rules to `buildPrescanSystem` and `buildNotesSystem`. Renamed `GOOGLE_API_KEY` → `GEMINI_API_KEY`. Rewrote `services-claude.test.ts` with `vi.hoisted()` + regular-function constructor mock. 173 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
@@ -99,3 +101,5 @@
 | 2026-04-17 | QA | Session 6 verification | Complete — 162 tests passing, TS clean |
 | 2026-04-17 | Developer | FA Session Runner — backend routes + QuizRunner UI | Complete |
 | 2026-04-17 | QA | Session 7 verification | Complete — 176 tests passing, TS clean |
+| 2026-04-17 | Developer | Google AI Studio migration + prompt refinements | Complete |
+| 2026-04-17 | QA | Session 8 verification | Complete — 173 tests passing, TS clean |
