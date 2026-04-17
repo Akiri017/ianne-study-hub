@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 3 complete
+**Status:** In progress — Session 4 complete
 
 ---
 
@@ -11,6 +11,7 @@
 - [x] Database schema — `schema.sql` with all 8 tables, FK constraints, cascade deletes; auto-runs on server start via `db.exec()`; migration stub `001_initial_schema.ts`
 - [x] App shell — Sidebar (subject list, expand/collapse, NewSubjectModal), Topbar (breadcrumb, right panel toggle), StatusBar (streaming indicator, clock), RightPanel (WEAK POINTS / TASKS tabs, placeholder), DashboardPage (stats strip, empty states); React Router wired; shared UI primitives (Button, Badge, Modal, SectionLabel)
 - [x] Claude proxy + SSE streaming — `streamGeneration()` with SSE relay, 30s AbortController timeout, prompt caching on system block; prompt builders for prescan/notes/quiz per PRD §9; `POST /modules/:id/generate`, `POST /outputs/:id/regenerate` (SSE); `GET /outputs/:id`, `PATCH /outputs/:id`; `useStreamingOutput` hook (idle/streaming/done/error); typed API wrappers in `client/src/lib/api.ts`
+- [x] AI Output Viewer — `OutputPanel` component (not-generated/streaming/generated states, react-markdown, quiz raw JSON, inline editor, RegenerateModal); `ModuleView` (Pre-Scan/Notes/Quiz tab bar, dot indicators, key remount); `SubjectView` (header, UploadZone click-to-upload, ModuleCard list); `ModuleCard` output chips; Sidebar NavLink fix + real module list; routes registered in `App.tsx`
 
 ---
 
@@ -22,9 +23,13 @@
 
 **Session 3 — April 17, 2026** — Claude proxy + SSE streaming complete. `streamGeneration()` with SSE relay, prompt caching, 30s timeout, all three prompt types. Routes: POST /generate, POST /regenerate, GET+PATCH /outputs. Client `useStreamingOutput` hook. 100 tests passing.
 
+**Session 4 — April 17, 2026** — AI Output Viewer + Subject/Module views complete. OutputPanel (three states, react-markdown, inline edit, RegenerateModal), ModuleView (tab bar with dot indicators), SubjectView (UploadZone, ModuleCard list), Sidebar NavLink fix + real module list. App is end-to-end usable: create subject → upload file → generate prescan/notes/quiz → view/edit/regenerate. `streamGeneration()` with SSE relay, prompt caching, 30s timeout, all three prompt types. Routes: POST /generate, POST /regenerate, GET+PATCH /outputs. Client `useStreamingOutput` hook. 100 tests passing.
+
 **Known deferred items:**
-- `buildBreadcrumb` in AppShell is stubbed — fills in during Subject View / Module View tasks
+- Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
+- StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
 - Multi-module quiz route returns 501 — separate task
+- Full quiz UI (question cards, MCQ/short-answer, FA session) — separate session (deferred from Session 4)
 - Client-side `useStreamingOutput` hook has no unit tests — needs `@testing-library/react` + `jsdom` (not yet installed)
 
 ---
@@ -38,12 +43,12 @@
 - [x] Module upload — `POST /subjects/:id/modules/upload`; Multer config (20MB, PDF+DOCX only); file saved to `/uploads`; module row inserted
 - [x] File parsing — pdf-parse + mammoth text extraction service (`server/src/services/parser.ts`)
 - [x] Claude proxy + SSE streaming — prompt assembly service, SSE relay to client, `useStreamingOutput` hook
-- [ ] Pre-Scan generation — `POST /modules/:id/generate` with `output_type: prescan`; prompt per AI constraints in PRD §9; output saved to `ai_outputs`
-- [ ] Structured Notes generation — same route, `output_type: notes`; bottom-up concept ordering prompt
-- [ ] Single-module Quiz generation — same route, `output_type: quiz`; configurable question count; JSON question schema
-- [ ] AI output viewer — OutputPanel component: not-generated / streaming / generated states; react-markdown rendering; edit inline; regenerate with instructions
-- [ ] Module View — tab bar (Pre-Scan / Notes / Quiz Generator); OutputPanel per tab
-- [ ] Subject View — module list (ModuleCard), UploadZone, multi-module quiz trigger button
+- [x] Pre-Scan generation — `POST /modules/:id/generate` with `output_type: prescan`; prompt per AI constraints in PRD §9; output saved to `ai_outputs`
+- [x] Structured Notes generation — same route, `output_type: notes`; bottom-up concept ordering prompt
+- [x] Single-module Quiz generation — same route, `output_type: quiz`; configurable question count; JSON question schema (rendered as raw JSON for now — full quiz UI is a follow-up session)
+- [x] AI output viewer — OutputPanel component: not-generated / streaming / generated states; react-markdown rendering; edit inline; regenerate with instructions
+- [x] Module View — tab bar (Pre-Scan / Notes / Quiz Generator); OutputPanel per tab
+- [x] Subject View — module list (ModuleCard), UploadZone, multi-module quiz trigger button
 - [ ] Multi-module quiz — `POST /generate/multi-module-quiz`; module selection modal; quizzes + quiz_modules rows saved
 - [ ] Weak Point Log — kanban board (Open / Patched / Confirmed); ErrorCard component; ErrorCardModal (create/edit/delete); CRUD routes
 - [x] App shell — Sidebar, Topbar, StatusBar, right panel toggle; routing (React Router)
@@ -78,3 +83,6 @@
 | 2026-04-17 | Developer | Claude proxy + SSE streaming | Complete |
 | 2026-04-17 | QA | Session 3 verification | Complete — 100 tests passing |
 | 2026-04-17 | CI/CD | Session 3 commit | Complete — 69f2f56 |
+| 2026-04-17 | Developer | OutputPanel + Module View + Subject View | Complete |
+| 2026-04-17 | QA | Session 4 verification | Complete — 100 tests passing, TS clean |
+| 2026-04-17 | CI/CD | Session 4 commit | Complete — 58b5e9d |
