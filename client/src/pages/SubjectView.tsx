@@ -17,6 +17,7 @@ import Modal from '../components/ui/Modal'
 import ModuleCard from '../components/modules/ModuleCard'
 import { getSubjects, getModules, uploadModule, createMultiModuleQuiz, getSubjectQuizzes } from '../lib/api'
 import type { Module, QuizSummary } from '../lib/api'
+import { useAppContext } from '../lib/app-context'
 
 // ---------------------------------------------------------------------------
 // UploadZone
@@ -394,6 +395,7 @@ export default function SubjectView() {
   const { subjectId } = useParams<{ subjectId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
+  const { setBreadcrumb } = useAppContext()
 
   const numericSubjectId = Number(subjectId)
 
@@ -410,6 +412,14 @@ export default function SubjectView() {
   const [quizSuccessMsg, setQuizSuccessMsg] = useState<string | null>(null)
   const [quizzes, setQuizzes] = useState<QuizSummary[]>([])
   const [quizzesLoading, setQuizzesLoading] = useState(true)
+
+  // Push real subject name into the Topbar breadcrumb; clear on unmount
+  useEffect(() => {
+    if (subjectName) {
+      setBreadcrumb({ subject: subjectName })
+    }
+    return () => { setBreadcrumb({}) }
+  }, [subjectName, setBreadcrumb])
 
   const fetchModules = useCallback(async () => {
     if (!numericSubjectId) return

@@ -216,7 +216,7 @@ export interface Task {
 }
 
 export const getTasks = (): Promise<{ tasks: Task[] }> =>
-  fetch('/api/tasks').then((r) => r.json())
+  request('/tasks')
 
 export const createTask = (
   data: { title: string; due_date: string; subject_id?: number }

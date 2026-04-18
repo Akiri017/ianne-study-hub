@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import SectionLabel from '../ui/SectionLabel'
-import { getSubjects, deleteSubject, getModules, type Subject, type Module } from '../../lib/api'
+import { getSubjects, getModules, type Subject, type Module } from '../../lib/api'
 
 // ---------------------------------------------------------------------------
 // NewSubjectModal
@@ -178,39 +178,12 @@ function SubjectModuleList({ subject }: SubjectModuleListProps) {
 
 interface SubjectTreeItemProps {
   subject: Subject
-  onDeleted: () => void
 }
 
-function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
+function SubjectTreeItem({ subject }: SubjectTreeItemProps) {
   const [expanded, setExpanded] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  // Track real module count — populated when modules are fetched on expand
   const [moduleCount, setModuleCount] = useState<number | null>(null)
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    // Stop the row click from toggling expand
-    e.stopPropagation()
-
-    if (!window.confirm(`Delete "${subject.name}"? This will remove all associated modules, outputs, weak points, and tasks.`)) {
-      return
-    }
-
-    setDeleting(true)
-    try {
-      const result = await deleteSubject(subject.id)
-      if ('error' in result) {
-        console.error('[Sidebar] delete subject error:', result.error)
-      } else {
-        onDeleted()
-      }
-    } catch (err) {
-      console.error('[Sidebar] delete subject network error:', err)
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  // When the tree expands, also fetch module count if we don't have it yet
   const handleExpand = () => {
     setExpanded((v) => !v)
     if (moduleCount === null) {
@@ -224,13 +197,7 @@ function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
 
   return (
     <div>
-      {/* Subject row — NavLink for routing + expand toggle */}
-      <div className="relative group flex items-center">
-        {/*
-          FIX: previously onClick called e.preventDefault() which blocked navigation.
-          Now we let NavLink handle routing normally and call handleExpand() separately.
-          Both navigation and tree expand/collapse happen together on click.
-        */}
+      <div className="flex items-center">
         <NavLink
           to={`/subjects/${subject.id}`}
           className={({ isActive }) =>
@@ -243,29 +210,16 @@ function SubjectTreeItem({ subject, onDeleted }: SubjectTreeItemProps) {
         >
           <span className="truncate flex-1 text-sm">{subject.name}</span>
 
-          {/* Module count badge — shows real count once fetched, blank until then */}
           <span className="font-mono text-xs bg-bg-subtle text-text-muted px-1.5 py-0.5 rounded-sm shrink-0">
             {moduleCount !== null ? moduleCount : ''}
           </span>
 
-          {/* Chevron */}
           <span className={`text-text-muted text-xs transition-transform duration-150 shrink-0 ${expanded ? 'rotate-90' : ''}`}>
             ›
           </span>
         </NavLink>
-
-        {/* Delete button — only visible on group hover */}
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          aria-label={`Delete ${subject.name}`}
-          className="absolute right-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100 text-text-muted hover:text-error transition-opacity duration-100 p-1 rounded"
-        >
-          <span className="text-xs leading-none">×</span>
-        </button>
       </div>
 
-      {/* Expanded: real module list fetched from the API */}
       {expanded && (
         <div className="pl-6 pb-1">
           <SubjectModuleList subject={subject} />
@@ -298,29 +252,21 @@ function SkeletonRows() {
 // ---------------------------------------------------------------------------
 
 interface SidebarProps {
-  /** Controls whether the New Subject modal is open — owned by AppShell */
   newSubjectOpen: boolean
   setNewSubjectOpen: (open: boolean) => void
-  /** Called after a subject is successfully created so AppShell can bump the version */
   onSubjectCreated: () => void
-  /**
-   * Incremented by AppShell when a subject is created or deleted.
-   * Sidebar watches this to trigger a refetch.
-   */
   subjectListVersion: number
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
-/**
- * 240px fixed sidebar.
- * Fetches subjects from GET /api/subjects on mount and whenever subjectListVersion changes.
- * The New Subject modal state is owned externally (AppShell) so DashboardPage can
- * open it via AppContext without the modal living in this component's state.
- */
 export default function Sidebar({
   newSubjectOpen,
   setNewSubjectOpen,
   onSubjectCreated,
   subjectListVersion,
+  collapsed,
+  onToggleCollapsed,
 }: SidebarProps) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(true)
@@ -347,78 +293,98 @@ export default function Sidebar({
     onSubjectCreated() // tell AppShell to bump version → triggers refetch
   }
 
-  const handleSubjectDeleted = () => {
-    onSubjectCreated() // same signal — reuse the version bump mechanism
-  }
-
   return (
     <>
-      <aside className="w-60 h-full bg-bg-surface border-r border-border-default flex flex-col shrink-0">
-        {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-border-default shrink-0">
-          <p className="font-mono text-sm font-semibold text-text-secondary tracking-widest">
-            STUDY HUB
-          </p>
-          <p className="font-mono text-xs text-text-muted mt-0.5">v1.0</p>
-        </div>
-
-        {/* Navigation */}
-        <nav className="px-2 pt-3 pb-2 shrink-0">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors duration-100',
-                isActive
-                  ? 'text-text-primary bg-bg-elevated border-l-2 border-accent'
-                  : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary',
-              ].join(' ')
-            }
+      {/* Collapsed strip — just the toggle button */}
+      {collapsed && (
+        <aside className="w-10 h-full bg-bg-surface border-r border-border-default flex flex-col items-center pt-3 shrink-0">
+          <button
+            onClick={onToggleCollapsed}
+            aria-label="Expand sidebar"
+            className="text-text-muted hover:text-text-primary transition-colors duration-100 p-1.5 rounded"
           >
-            Dashboard
-          </NavLink>
-        </nav>
+            <span className="text-base leading-none">›</span>
+          </button>
+        </aside>
+      )}
 
-        {/* Separator */}
-        <div className="mx-3 border-t border-border-default shrink-0" />
-
-        {/* Subject list — scrollable */}
-        <div className="flex-1 overflow-y-auto min-h-0 pt-2">
-          <div className="px-3 pb-1">
-            <SectionLabel className="mb-2">Subjects</SectionLabel>
+      {/* Full sidebar */}
+      {!collapsed && (
+        <aside className="w-60 h-full bg-bg-surface border-r border-border-default flex flex-col shrink-0">
+          {/* Header with toggle */}
+          <div className="px-4 pt-4 pb-3 border-b border-border-default shrink-0 flex items-start justify-between">
+            <div>
+              <p className="font-mono text-sm font-semibold text-text-secondary tracking-widest">
+                STUDY HUB
+              </p>
+              <p className="font-mono text-xs text-text-muted mt-0.5">v1.0</p>
+            </div>
+            <button
+              onClick={onToggleCollapsed}
+              aria-label="Collapse sidebar"
+              className="text-text-muted hover:text-text-primary transition-colors duration-100 p-1 rounded mt-0.5"
+            >
+              <span className="text-base leading-none">‹</span>
+            </button>
           </div>
 
-          {loading && <SkeletonRows />}
+          {/* Navigation */}
+          <nav className="px-2 pt-3 pb-2 shrink-0">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                [
+                  'flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors duration-100',
+                  isActive
+                    ? 'text-text-primary bg-bg-elevated border-l-2 border-accent'
+                    : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary',
+                ].join(' ')
+              }
+            >
+              Dashboard
+            </NavLink>
+          </nav>
 
-          {!loading && fetchError && (
-            <p className="px-3 text-error text-xs font-mono">{fetchError}</p>
-          )}
+          {/* Separator */}
+          <div className="mx-3 border-t border-border-default shrink-0" />
 
-          {!loading && !fetchError && subjects.length === 0 && (
-            <p className="px-3 text-text-muted text-xs font-mono">No subjects yet.</p>
-          )}
+          {/* Subject list — scrollable */}
+          <div className="flex-1 overflow-y-auto min-h-0 pt-2">
+            <div className="px-3 pb-1">
+              <SectionLabel className="mb-2">Subjects</SectionLabel>
+            </div>
 
-          {!loading && !fetchError && subjects.map((subject) => (
-            <SubjectTreeItem
-              key={subject.id}
-              subject={subject}
-              onDeleted={handleSubjectDeleted}
-            />
-          ))}
-        </div>
+            {loading && <SkeletonRows />}
 
-        {/* New Subject button — pinned to bottom of sidebar */}
-        <div className="px-3 py-3 border-t border-border-default shrink-0">
-          <button
-            onClick={() => setNewSubjectOpen(true)}
-            className="w-full flex items-center gap-1.5 text-text-secondary text-sm hover:text-text-primary transition-colors duration-100 py-1"
-          >
-            <span className="text-base leading-none">+</span>
-            <span>New Subject</span>
-          </button>
-        </div>
-      </aside>
+            {!loading && fetchError && (
+              <p className="px-3 text-error text-xs font-mono">{fetchError}</p>
+            )}
+
+            {!loading && !fetchError && subjects.length === 0 && (
+              <p className="px-3 text-text-muted text-xs font-mono">No subjects yet.</p>
+            )}
+
+            {!loading && !fetchError && subjects.map((subject) => (
+              <SubjectTreeItem
+                key={subject.id}
+                subject={subject}
+              />
+            ))}
+          </div>
+
+          {/* New Subject button — pinned to bottom of sidebar */}
+          <div className="px-3 py-3 border-t border-border-default shrink-0">
+            <button
+              onClick={() => setNewSubjectOpen(true)}
+              className="w-full flex items-center gap-1.5 text-text-secondary text-sm hover:text-text-primary transition-colors duration-100 py-1"
+            >
+              <span className="text-base leading-none">+</span>
+              <span>New Subject</span>
+            </button>
+          </div>
+        </aside>
+      )}
 
       <NewSubjectModal
         isOpen={newSubjectOpen}

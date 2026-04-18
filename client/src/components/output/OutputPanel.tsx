@@ -16,7 +16,7 @@ import Modal from '../ui/Modal'
 import SectionLabel from '../ui/SectionLabel'
 import { patchOutput } from '../../lib/api'
 import { useStreamingOutput } from '../../hooks/useStreamingOutput'
-import type { AiOutput } from '../../lib/api'
+import type { AiOutput, QuizQuestion } from '../../lib/api'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,8 +48,203 @@ const OUTPUT_LABELS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// InlineQuiz — interactive quiz runner embedded in the output panel.
+// No session tracking — purely a practice mode.
+// ---------------------------------------------------------------------------
+
+interface InlineQuizAnswerState {
+  userAnswer: string
+  correct: boolean
+  revealed: boolean
+}
+
+interface InlineQuizProps {
+  content: string
+}
+
+function InlineQuiz({ content }: InlineQuizProps) {
+  let questions: QuizQuestion[] = []
+  try {
+    questions = JSON.parse(content)
+  } catch {
+    return (
+      <pre className="text-text-primary text-sm font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
+        {content}
+      </pre>
+    )
+  }
+
+  const [phase, setPhase] = useState<'intro' | 'running' | 'complete'>('intro')
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [answers, setAnswers] = useState<Record<number, InlineQuizAnswerState>>({})
+  const [shortInput, setShortInput] = useState('')
+
+  const handleMcqAnswer = (choice: string) => {
+    const correct = choice.trim() === questions[currentIdx].answer.trim()
+    setAnswers((prev) => ({ ...prev, [currentIdx]: { userAnswer: choice, correct, revealed: true } }))
+  }
+
+  const handleShortSubmit = (userAnswer: string) => {
+    setAnswers((prev) => ({ ...prev, [currentIdx]: { userAnswer, correct: false, revealed: false } }))
+  }
+
+  const handleSelfMark = (correct: boolean) => {
+    setAnswers((prev) => ({ ...prev, [currentIdx]: { ...prev[currentIdx], correct, revealed: true } }))
+  }
+
+  const canAdvance = answers[currentIdx]?.revealed ?? false
+
+  const handleNext = () => {
+    if (currentIdx < questions.length - 1) {
+      setCurrentIdx((i) => i + 1)
+      setShortInput('')
+    } else {
+      setPhase('complete')
+    }
+  }
+
+  const handleRestart = () => {
+    setPhase('intro')
+    setCurrentIdx(0)
+    setAnswers({})
+    setShortInput('')
+  }
+
+  const score = Object.values(answers).filter((a) => a.correct).length
+
+  if (phase === 'intro') {
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 px-6 text-center">
+        <div>
+          <p className="text-text-primary text-base font-semibold">{questions.length} Questions</p>
+          <p className="text-text-muted text-xs font-mono mt-1">MCQ + short-answer mix</p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setPhase('running')}>
+          Start Quiz
+        </Button>
+      </div>
+    )
+  }
+
+  if (phase === 'complete') {
+    const pct = Math.round((score / questions.length) * 100)
+    return (
+      <div className="flex flex-col items-center gap-6 py-8 px-6 text-center">
+        <div>
+          <p className="text-text-primary text-3xl font-mono font-semibold">{score}/{questions.length}</p>
+          <p className={`text-xl font-mono font-semibold mt-1 ${pct >= 70 ? 'text-emerald-400' : 'text-red-400'}`}>{pct}%</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={handleRestart}>Retry</Button>
+      </div>
+    )
+  }
+
+  const q = questions[currentIdx]
+  const answerState = answers[currentIdx] ?? null
+  const answered = answerState?.revealed ?? false
+
+  return (
+    <div className="flex flex-col gap-4 py-4 px-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-xs text-text-muted">
+          {currentIdx + 1} / {questions.length}
+        </span>
+        <span className="font-mono text-[10px] bg-bg-subtle text-text-muted px-2 py-0.5 rounded-sm uppercase">
+          {q.type === 'mcq' ? 'Multiple Choice' : 'Short Answer'}
+        </span>
+      </div>
+
+      <div className="h-1 rounded-full bg-bg-elevated overflow-hidden">
+        <div
+          className="h-full bg-accent rounded-full transition-all duration-300"
+          style={{ width: `${((currentIdx + 1) / questions.length) * 100}%` }}
+        />
+      </div>
+
+      <span className="font-mono text-[10px] text-text-muted bg-bg-subtle px-2 py-1 rounded-sm uppercase tracking-widest self-start">
+        {q.topic}
+      </span>
+
+      <p className="text-text-primary text-sm leading-relaxed">{q.question}</p>
+
+      {q.type === 'mcq' && (
+        <div className="flex flex-col gap-2">
+          {(q.choices ?? []).map((choice, idx) => {
+            let cls = 'flex items-start gap-3 p-3 rounded-md border text-sm text-left w-full transition-colors duration-100 '
+            if (!answered) {
+              cls += 'border-border-default bg-bg-surface hover:border-accent hover:bg-bg-elevated cursor-pointer'
+            } else {
+              const isCorrect = choice === q.answer
+              const isSelected = choice === answerState?.userAnswer
+              if (isCorrect) cls += 'border-emerald-500 bg-emerald-500/10 text-emerald-400 cursor-default'
+              else if (isSelected) cls += 'border-red-500 bg-red-500/10 text-red-400 cursor-default'
+              else cls += 'border-border-default bg-bg-surface text-text-muted cursor-default opacity-60'
+            }
+            return (
+              <button key={choice} className={cls} onClick={() => !answered && handleMcqAnswer(choice)} disabled={answered}>
+                <span className="font-mono text-xs shrink-0 mt-0.5 opacity-60">{String.fromCharCode(65 + idx)}.</span>
+                <span>{choice}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {q.type === 'short_answer' && (
+        answerState === null ? (
+          <div className="flex flex-col gap-3">
+            <textarea
+              value={shortInput}
+              onChange={(e) => setShortInput(e.target.value)}
+              rows={3}
+              placeholder="Type your answer here…"
+              className="px-3 py-2 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors resize-none"
+            />
+            <div className="flex justify-end">
+              <Button variant="primary" size="sm" onClick={() => shortInput.trim() && handleShortSubmit(shortInput.trim())} disabled={!shortInput.trim()}>
+                Submit
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="p-3 rounded-md bg-bg-subtle border border-border-default">
+              <p className="text-xs font-mono text-text-muted uppercase tracking-widest mb-1">Your answer</p>
+              <p className="text-text-secondary text-sm">{answerState.userAnswer}</p>
+            </div>
+            <div className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/40">
+              <p className="text-xs font-mono text-emerald-400 uppercase tracking-widest mb-1">Correct answer</p>
+              <p className="text-emerald-300 text-sm">{q.answer}</p>
+            </div>
+            {!answerState.revealed && (
+              <div className="flex gap-2 justify-end items-center">
+                <p className="text-text-muted text-xs font-mono mr-auto">Did you get it right?</p>
+                <Button variant="ghost" size="sm" onClick={() => handleSelfMark(false)}><span className="text-red-400">✗ No</span></Button>
+                <Button variant="primary" size="sm" onClick={() => handleSelfMark(true)}>✓ Yes</Button>
+              </div>
+            )}
+          </div>
+        )
+      )}
+
+      {answered && (
+        <p className={`text-sm font-mono text-center ${answerState.correct ? 'text-emerald-400' : 'text-red-400'}`}>
+          {answerState.correct ? '✓ Correct!' : '✗ Incorrect'}
+        </p>
+      )}
+
+      <div className="flex justify-end">
+        <Button variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance}>
+          {currentIdx < questions.length - 1 ? 'Next →' : 'Finish'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // OutputContent — renders the saved content with react-markdown.
-// Quiz outputs are displayed as formatted JSON in a <pre> block.
+// Quiz outputs render as an interactive inline quiz.
 // ---------------------------------------------------------------------------
 
 interface OutputContentProps {
@@ -59,25 +254,30 @@ interface OutputContentProps {
 
 function OutputContent({ content, outputType }: OutputContentProps) {
   if (outputType === 'quiz') {
-    // Render quiz as pretty-printed JSON; fall back to raw string if malformed
-    let displayed = content
-    try {
-      displayed = JSON.stringify(JSON.parse(content), null, 2)
-    } catch {
-      // content is not valid JSON — show as-is
-    }
-    return (
-      <pre className="text-text-primary text-sm font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
-        {displayed}
-      </pre>
-    )
+    return <InlineQuiz content={content} />
   }
 
   return (
-    // Tailwind prose-like overrides applied via className on the wrapper.
-    // react-markdown renders to semantic HTML; we style it with Tailwind utilities.
     <div className="prose-output text-text-primary text-sm leading-relaxed [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-text-primary [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-text-primary [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-medium [&_h3]:text-text-secondary [&_h3]:mt-2 [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-2 [&_li]:mb-0.5 [&_strong]:text-text-primary [&_code]:bg-bg-subtle [&_code]:px-1 [&_code]:rounded [&_code]:font-mono [&_code]:text-xs [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary">
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown
+        components={{
+          h3({ children, ...props }) {
+            const text = String(children)
+            const isAiNote = text.startsWith('[AI Note]')
+            if (isAiNote) {
+              return (
+                <h3 {...props} className="text-sm font-medium mt-3 mb-1 flex items-center gap-2">
+                  <span className="font-mono text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-sm uppercase tracking-widest shrink-0">AI Note</span>
+                  <span className="text-amber-300">{text.replace('[AI Note]', '').trim()}</span>
+                </h3>
+              )
+            }
+            return <h3 {...props}>{children}</h3>
+          }
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -163,7 +363,7 @@ function RegenerateModal({ isOpen, onClose, onRegenerate, isLoading }: Regenerat
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="What should Claude change? (optional)"
+          placeholder="What should the AI change? (optional)"
           rows={4}
           className="w-full p-3 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-border-strong transition-colors resize-none"
         />

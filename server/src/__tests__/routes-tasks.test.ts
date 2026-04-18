@@ -84,6 +84,81 @@ describe('GET /api/tasks', () => {
   })
 })
 
+// ── POST /api/tasks ───────────────────────────────────────────────────────────
+
+describe('POST /api/tasks', () => {
+  const validBody = { title: 'Review notes', due_date: '2026-05-10' }
+
+  it('returns 201 with new task when no subject_id provided', async () => {
+    const fakeTask = { id: 5, subject_id: null, title: 'Review notes', due_date: '2026-05-10', completed: 0, subject_name: null }
+    mockDb.prepare
+      .mockReturnValueOnce({ run: vi.fn(() => ({ lastInsertRowid: 5 })) }) // INSERT
+      .mockReturnValueOnce({ get: vi.fn(() => fakeTask) })                  // SELECT new row
+
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(validBody),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json() as { task: typeof fakeTask }
+    expect(body.task.title).toBe('Review notes')
+    expect(body.task.subject_id).toBeNull()
+  })
+
+  it('returns 201 with subject_name when valid subject_id provided', async () => {
+    const fakeTask = { id: 6, subject_id: 1, title: 'Study', due_date: '2026-05-10', completed: 0, subject_name: 'OS' }
+    mockDb.prepare
+      .mockReturnValueOnce({ get: vi.fn(() => ({ id: 1 })) })               // subject exists check
+      .mockReturnValueOnce({ run: vi.fn(() => ({ lastInsertRowid: 6 })) })   // INSERT
+      .mockReturnValueOnce({ get: vi.fn(() => fakeTask) })                   // SELECT new row
+
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...validBody, subject_id: 1 }),
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json() as { task: typeof fakeTask }
+    expect(body.task.subject_name).toBe('OS')
+  })
+
+  it('returns 400 when title is missing', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ due_date: '2026-05-01' }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toContain('title')
+  })
+
+  it('returns 400 when due_date is invalid format', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Study', due_date: 'bad-date' }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toContain('due_date')
+  })
+
+  it('returns 400 when subject_id is provided but subject does not exist', async () => {
+    mockDb.prepare.mockReturnValueOnce({ get: vi.fn(() => undefined) }) // subject not found
+
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...validBody, subject_id: 999 }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toContain('subject')
+  })
+})
+
 // ── GET /api/subjects/:subjectId/tasks ────────────────────────────────────────
 
 describe('GET /api/subjects/:subjectId/tasks', () => {

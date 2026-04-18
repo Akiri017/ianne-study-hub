@@ -24,6 +24,64 @@ router.get('/', (_req: Request, res: Response) => {
 })
 
 // ---------------------------------------------------------------------------
+// POST /api/tasks — create a new task. subject_id is optional.
+// ---------------------------------------------------------------------------
+router.post('/', (req: Request, res: Response) => {
+  const { title, due_date, subject_id } = req.body as {
+    title?: unknown
+    due_date?: unknown
+    subject_id?: unknown
+  }
+
+  if (typeof title !== 'string' || title.trim() === '') {
+    res.status(400).json({ error: 'title is required' })
+    return
+  }
+
+  if (typeof due_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due_date)) {
+    res.status(400).json({ error: 'due_date must be YYYY-MM-DD' })
+    return
+  }
+
+  // subject_id is optional — must be a positive integer if provided
+  if (subject_id !== undefined && subject_id !== null) {
+    if (!Number.isInteger(subject_id) || (subject_id as number) <= 0) {
+      res.status(400).json({ error: 'subject_id must be a positive integer or null' })
+      return
+    }
+  }
+
+  try {
+    // If subject_id provided, verify the subject exists
+    if (subject_id != null) {
+      const subject = db.prepare('SELECT id FROM subjects WHERE id = ?').get(subject_id as number)
+      if (!subject) {
+        res.status(400).json({ error: 'subject not found' })
+        return
+      }
+    }
+
+    const resolvedSubjectId: number | null = (subject_id != null ? subject_id as number : null)
+    const result = db.prepare(
+      'INSERT INTO tasks (subject_id, title, due_date) VALUES (?, ?, ?)'
+    ).run(resolvedSubjectId, title.trim(), due_date)
+
+    const task = db.prepare(`
+      SELECT t.id, t.subject_id, t.title, t.due_date, t.completed,
+             s.name as subject_name
+      FROM tasks t
+      LEFT JOIN subjects s ON s.id = t.subject_id
+      WHERE t.id = ?
+    `).get(result.lastInsertRowid as number)
+
+    res.status(201).json({ task })
+  } catch (err) {
+    console.error('[tasks] POST / error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // PATCH /api/tasks/:id — update any combination of title, due_date, completed,
 // subject_id. At least one field required.
 // ---------------------------------------------------------------------------

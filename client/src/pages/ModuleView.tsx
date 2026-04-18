@@ -12,8 +12,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Badge from '../components/ui/Badge'
 import OutputPanel from '../components/output/OutputPanel'
-import { getModules } from '../lib/api'
+import { getModules, getSubjects } from '../lib/api'
 import type { Module, AiOutput } from '../lib/api'
+import { useAppContext } from '../lib/app-context'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +50,7 @@ export default function ModuleView() {
   const { subjectId, moduleId } = useParams<{ subjectId: string; moduleId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const { setBreadcrumb } = useAppContext()
 
   const numericSubjectId = Number(subjectId)
   const numericModuleId = Number(moduleId)
@@ -57,6 +59,7 @@ export default function ModuleView() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<OutputTab>('prescan')
+  const [subjectName, setSubjectName] = useState<string>('')
 
   // Module title may have been passed via router state from ModuleCard
   const routerModuleTitle = (location.state as { moduleTitle?: string } | null)?.moduleTitle
@@ -82,6 +85,27 @@ export default function ModuleView() {
   useEffect(() => {
     fetchModule()
   }, [fetchModule])
+
+  // Fetch subject name for breadcrumb
+  useEffect(() => {
+    getSubjects()
+      .then((data) => {
+        const found = data.subjects.find((s) => s.id === numericSubjectId)
+        if (found) setSubjectName(found.name)
+      })
+      .catch(() => {
+        // Non-critical — breadcrumb subject segment will be absent
+      })
+  }, [numericSubjectId])
+
+  // Push real subject + module names into the Topbar breadcrumb; clear on unmount
+  useEffect(() => {
+    const moduleTitle = module?.title ?? routerModuleTitle
+    if (moduleTitle) {
+      setBreadcrumb({ subject: subjectName || undefined, module: moduleTitle })
+    }
+    return () => { setBreadcrumb({}) }
+  }, [module, routerModuleTitle, subjectName, setBreadcrumb])
 
   // ---------------------------------------------------------------------------
   // After OutputPanel signals a generation completed, refetch to get the
@@ -172,16 +196,19 @@ export default function ModuleView() {
         })}
       </div>
 
-      {/* Output panel — only the active tab is rendered; others are unmounted to avoid
-          unnecessary streaming state leaking between tabs */}
+      {/* Output panels — all three are mounted; only the active one is visible.
+          Keeping them mounted preserves generated content when switching tabs. */}
       <div className="bg-bg-surface border border-border-default rounded-md overflow-hidden">
-        <OutputPanel
-          key={activeTab} // remount when tab changes so stream state resets cleanly
-          outputType={activeTab}
-          moduleId={numericModuleId}
-          existingOutput={getExistingOutput(activeTab)}
-          onOutputSaved={handleOutputSaved}
-        />
+        {TABS.map(({ key }) => (
+          <div key={key} className={activeTab === key ? '' : 'hidden'}>
+            <OutputPanel
+              outputType={key}
+              moduleId={numericModuleId}
+              existingOutput={getExistingOutput(key)}
+              onOutputSaved={handleOutputSaved}
+            />
+          </div>
+        ))}
       </div>
     </div>
   )
