@@ -74,7 +74,7 @@ router.get('/', (req: Request, res: Response) => {
     // Attach ai_output stubs for each module so the client knows what has been generated
     const modulesWithOutputs = modules.map((mod) => {
       const outputs = db.prepare(
-        'SELECT id, output_type, updated_at FROM ai_outputs WHERE module_id = ? ORDER BY created_at ASC'
+        'SELECT id, output_type, content, updated_at FROM ai_outputs WHERE module_id = ? ORDER BY created_at ASC'
       ).all(mod.id)
 
       return { ...mod, outputs }

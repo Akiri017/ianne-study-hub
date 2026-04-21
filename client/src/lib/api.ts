@@ -43,9 +43,14 @@ export const createSubject = (name: string): Promise<{ subject: Subject } | { er
     body: JSON.stringify({ name }),
   }).then((r) => r.json())
 
-/** Delete a subject by id. Returns { deleted: true } or { error: string }. */
-export const deleteSubject = (id: number): Promise<{ deleted: boolean } | { error: string }> =>
-  fetch(`/api/subjects/${id}`, { method: 'DELETE' }).then((r) => r.json())
+/** Delete a subject by id. Throws on non-2xx with the server error message. */
+export async function deleteSubject(id: number): Promise<void> {
+  const res = await fetch(`/api/subjects/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+}
 
 export { request }
 
@@ -323,6 +328,34 @@ export const completeSession = (
 // ---------------------------------------------------------------------------
 // Quizzes
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Reviewer export
+// ---------------------------------------------------------------------------
+
+/**
+ * Exports a reviewer document for a subject's Confirmed weak points.
+ * Returns a Blob (the raw DOCX or PDF binary).
+ * Throws if the server returns a non-2xx response, with the JSON error message.
+ */
+export async function exportReviewer(
+  subjectId: number,
+  format: 'docx' | 'pdf'
+): Promise<Blob> {
+  const res = await fetch(`/api/subjects/${subjectId}/reviewer/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format }),
+  })
+
+  if (!res.ok) {
+    // Error bodies are JSON — read and re-throw with the message
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+
+  return res.blob()
+}
 
 /** Create a multi-module quiz synchronously. Returns quiz metadata or an error. */
 export const createMultiModuleQuiz = (params: {

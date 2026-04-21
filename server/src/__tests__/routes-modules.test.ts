@@ -149,22 +149,27 @@ describe('GET /api/subjects/:subjectId/modules', () => {
     const fakeModules = [
       { id: 1, title: 'Lecture 1', file_type: 'pdf', created_at: '2026-04-16T00:00:00Z' },
     ]
+    const fakeOutputs = [
+      { id: 10, output_type: 'prescan', content: 'Summary text', updated_at: '2026-04-16T01:00:00Z' },
+    ]
 
     // prepare() call 1: subject existence check → get() returns a subject
     // prepare() call 2: modules list → all() returns fakeModules
-    // prepare() call 3: outputs for module 1 → all() returns []
+    // prepare() call 3: outputs for module 1 → all() returns fakeOutputs
     mockDb.prepare
       .mockReturnValueOnce({ get: vi.fn(() => ({ id: 1 })) })
       .mockReturnValueOnce({ all: vi.fn(() => fakeModules) })
-      .mockReturnValueOnce({ all: vi.fn(() => []) })
+      .mockReturnValueOnce({ all: vi.fn(() => fakeOutputs) })
 
     const res = await fetch(`${baseUrl}/api/subjects/1/modules`)
     expect(res.status).toBe(200)
 
-    const body = await res.json() as { modules: unknown[] }
+    const body = await res.json() as { modules: Array<{ outputs: Array<{ content: string }> }> }
     expect(body).toHaveProperty('modules')
     expect(Array.isArray(body.modules)).toBe(true)
     expect(body.modules).toHaveLength(1)
+    // content must be included so OutputPanel can restore on navigation return
+    expect(body.modules[0].outputs[0].content).toBe('Summary text')
   })
 
   it('returns 404 when subject does not exist', async () => {

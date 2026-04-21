@@ -219,7 +219,7 @@ function InlineQuiz({ content }: InlineQuizProps) {
             {!answerState.revealed && (
               <div className="flex gap-2 justify-end items-center">
                 <p className="text-text-muted text-xs font-mono mr-auto">Did you get it right?</p>
-                <Button variant="ghost" size="sm" onClick={() => handleSelfMark(false)}><span className="text-red-400">✗ No</span></Button>
+                <Button variant="danger" size="sm" onClick={() => handleSelfMark(false)}>✗ No</Button>
                 <Button variant="primary" size="sm" onClick={() => handleSelfMark(true)}>✓ Yes</Button>
               </div>
             )}
@@ -405,19 +405,19 @@ export default function OutputPanel({
   const { state, content, error, startStream, reset } = useStreamingOutput()
 
   // Guard: only call onOutputSaved once per completed stream.
-  // Without this, the callback fires on every re-render while state===done && !existingOutput,
+  // Without this, the callback fires on every re-render while state===done,
   // creating an infinite refetch loop between this component and the parent.
   const didNotifyParent = useRef(false)
   useEffect(() => {
-    if (state === 'done' && !existingOutput && !didNotifyParent.current) {
+    if (state === 'done' && !didNotifyParent.current) {
       didNotifyParent.current = true
       onOutputSaved?.({
-        id: -1, // sentinel — parent replaces via refetch
+        id: existingOutput?.id ?? -1, // sentinel if new — parent replaces via refetch
         module_id: moduleId,
         output_type: outputType,
         content,
         instructions: null,
-        created_at: new Date().toISOString(),
+        created_at: existingOutput?.created_at ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
     }
@@ -425,11 +425,11 @@ export default function OutputPanel({
     if (state === 'streaming') {
       didNotifyParent.current = false
     }
-  }, [state, existingOutput]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state, existingOutput, onOutputSaved]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The content to display in the generated/editing view.
-  // Priority: optimistic edited content → existingOutput from parent → streamed content.
-  const resolvedContent = editedContent ?? existingOutput?.content ?? content
+  // Priority: optimistic edited content → streamed content (if stream finished) → existingOutput from parent
+  const resolvedContent = editedContent ?? (state === 'done' ? content : existingOutput?.content) ?? content
 
   // Determine which "phase" the UI is in:
   //   - 'not-generated': no existingOutput and stream is idle/error

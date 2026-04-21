@@ -15,7 +15,7 @@ import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import ModuleCard from '../components/modules/ModuleCard'
-import { getSubjects, getModules, uploadModule, createMultiModuleQuiz, getSubjectQuizzes } from '../lib/api'
+import { getSubjects, getModules, uploadModule, createMultiModuleQuiz, getSubjectQuizzes, exportReviewer, deleteSubject } from '../lib/api'
 import type { Module, QuizSummary } from '../lib/api'
 import { useAppContext } from '../lib/app-context'
 
@@ -413,6 +413,16 @@ export default function SubjectView() {
   const [quizzes, setQuizzes] = useState<QuizSummary[]>([])
   const [quizzesLoading, setQuizzesLoading] = useState(true)
 
+  // Reviewer export state
+  const [exportFormat, setExportFormat] = useState<'docx' | 'pdf'>('docx')
+  const [exportLoading, setExportLoading] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  // Delete subject state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   // Push real subject name into the Topbar breadcrumb; clear on unmount
   useEffect(() => {
     if (subjectName) {
@@ -467,6 +477,42 @@ export default function SubjectView() {
   useEffect(() => {
     fetchQuizzes()
   }, [fetchQuizzes])
+
+  const handleExportReviewer = async () => {
+    setExportLoading(true)
+    setExportError(null)
+    try {
+      const blob = await exportReviewer(numericSubjectId, exportFormat)
+      // Trigger a browser download without navigating away
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const safeName = (subjectName || `subject-${subjectId}`)
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase()
+      anchor.href = url
+      anchor.download = `${safeName}_reviewer.${exportFormat}`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed. Please try again.')
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  const handleDeleteSubject = async () => {
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      await deleteSubject(numericSubjectId)
+      navigate('/')
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Deletion failed. Please try again.')
+      setDeleteLoading(false)
+    }
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-8">
@@ -525,6 +571,58 @@ export default function SubjectView() {
         ))}
       </div>
 
+      {/* Export Reviewer section */}
+      <div className="flex flex-col gap-3">
+        <SectionLabel>Export Reviewer</SectionLabel>
+        <p className="text-text-muted text-xs font-mono">
+          Generates a study reviewer from your Confirmed weak points.
+        </p>
+
+        {/* Format toggle */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { setExportFormat('docx'); setExportError(null) }}
+            className={[
+              'h-7 px-3 text-sm rounded-md font-medium border transition-colors duration-100',
+              exportFormat === 'docx'
+                ? 'bg-accent text-text-inverse border-accent'
+                : 'bg-bg-surface border-border-default text-text-primary hover:bg-bg-elevated',
+            ].join(' ')}
+          >
+            DOCX
+          </button>
+          <button
+            type="button"
+            onClick={() => { setExportFormat('pdf'); setExportError(null) }}
+            className={[
+              'h-7 px-3 text-sm rounded-md font-medium border transition-colors duration-100',
+              exportFormat === 'pdf'
+                ? 'bg-accent text-text-inverse border-accent'
+                : 'bg-bg-surface border-border-default text-text-primary hover:bg-bg-elevated',
+            ].join(' ')}
+          >
+            PDF
+          </button>
+        </div>
+
+        <div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleExportReviewer}
+            loading={exportLoading}
+            disabled={exportLoading}
+          >
+            {exportLoading ? 'Generating…' : 'Export Reviewer'}
+          </Button>
+        </div>
+
+        {exportError && (
+          <p className="text-error text-xs font-mono">{exportError}</p>
+        )}
+      </div>
+
       {/* Quizzes section */}
       {(quizzesLoading || quizzes.length > 0) && (
         <div className="flex flex-col gap-4">
@@ -549,6 +647,61 @@ export default function SubjectView() {
           ))}
         </div>
       )}
+
+      {/* Delete Subject */}
+      <div className="flex justify-start pt-4 border-t border-border-default">
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => { setDeleteModalOpen(true); setDeleteError(null) }}
+        >
+          Delete Subject
+        </Button>
+      </div>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => { if (!deleteLoading) setDeleteModalOpen(false) }}
+        title="Delete Subject"
+        maxWidth="sm"
+      >
+        <div className="flex flex-col gap-6 p-6">
+          <div>
+            <h2 className="text-text-primary text-base font-semibold">Delete Subject</h2>
+            <p className="text-text-secondary text-sm mt-2">
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-text-primary">
+                {subjectName || `Subject ${subjectId}`}
+              </span>
+              ? All modules and outputs will be permanently deleted.
+            </p>
+          </div>
+
+          {deleteError && (
+            <p className="text-error text-xs font-mono">{deleteError}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleDeleteSubject}
+              loading={deleteLoading}
+            >
+              {deleteLoading ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Multi-module quiz modal */}
       <MultiModuleQuizModal
