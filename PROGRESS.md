@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 7 complete
+**Status:** In progress — Session 12 complete
 
 ---
 
@@ -39,6 +39,8 @@
 
 **Session 11 — April 21, 2026** — Fixed regeneration stale content bug by prioritizing streaming chunks over DB payload. Added unit tests for `useStreamingOutput` hook with `@testing-library/react` and `jsdom`. 188 tests passing. TS clean.
 
+**Session 12 — April 26, 2026** — Bulk weak points from quiz results. Added `POST /api/ai/quiz-weak-points` (single Gemini call, generates `why_missed` for all wrong answers). Added `POST /api/subjects/:subjectId/weak-points/bulk` (batch insert, manual BEGIN/COMMIT/ROLLBACK for `node:sqlite` compatibility). Replaced per-question log buttons with a single "Log All to Weak Points" button in both `QuizRunner` and `InlineQuiz` (OutputPanel). Fixed quiz streaming "generation failed" false positive (post-stream SDK throw now only errors if no content was accumulated). Updated prescan Gemini prompt to primer format (Roman numerals, → arrows, contrast pairs, BIG PICTURE FLOW, KEY TAKEAWAYS). QA ran for first time this session — fixed stale transaction mock and added ROLLBACK path test. 208 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
@@ -67,7 +69,7 @@
 
 ### Should (high priority)
 - [x] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence
-- [ ] Reviewer export — `POST /subjects/:id/reviewer/export`; Claude generates reviewer from Confirmed weak points; DOCX + PDF download via docx + PDFKit
+- [x] Reviewer export — `POST /subjects/:id/reviewer/export`; Claude generates reviewer from Confirmed weak points; DOCX + PDF download via docx + PDFKit
 - [x] Task Tracker — task list + calendar view; TaskForm; CRUD routes (`/tasks`, `/subjects/:id/tasks`)
 - [x] Dashboard — open weak point count, upcoming deadlines, recent modules
 
@@ -111,3 +113,7 @@
 | 2026-04-18 | QA | Session 9 verification | Complete — 178 tests passing |
 | 2026-04-21 | QA | Session 10 verification | Complete — 188 tests passing |
 | 2026-04-21 | CI/CD | Session 11 commit | Complete — 07fa1d4 |
+| 2026-04-26 | Developer | Bulk weak points (ai-weak-points route, bulk insert route) | Complete |
+| 2026-04-26 | Developer | Prescan primer prompt + quiz streaming fix + InlineQuiz bulk UI | Complete |
+| 2026-04-26 | QA | Session 12 verification — fix stale transaction mock, add ROLLBACK test | Complete — 208 tests passing, TS clean |
+| 2026-04-26 | CI/CD | Session 12 commit | Complete — ecea9dd |
