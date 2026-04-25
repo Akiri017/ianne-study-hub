@@ -282,6 +282,8 @@ export interface Quiz {
   question_count: number
   questions: QuizQuestion[]
   created_at: string
+  /** subject_id of the first linked module. null for quizzes with no module link. */
+  subject_id: number | null
 }
 
 export interface QuizSummary {
@@ -355,6 +357,71 @@ export async function exportReviewer(
   }
 
   return res.blob()
+}
+
+// ---------------------------------------------------------------------------
+// AI — quiz weak point reason generation
+// ---------------------------------------------------------------------------
+
+export interface WrongAnswerInput {
+  id: string
+  question: string
+  correctAnswer: string
+  userAnswer: string
+  topic: string
+}
+
+export interface WhyMissedResult {
+  id: string
+  why_missed: string
+}
+
+/**
+ * Sends all wrong answers to Gemini in a single call and returns a why_missed
+ * explanation for each question.
+ * Throws on network failure or non-2xx response.
+ */
+export async function generateQuizWeakPointReasons(
+  questions: WrongAnswerInput[]
+): Promise<WhyMissedResult[]> {
+  const res = await fetch('/api/ai/quiz-weak-points', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ questions }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+  const data = await res.json() as { results: WhyMissedResult[] }
+  return data.results
+}
+
+/**
+ * Bulk-creates weak points for a subject in a single DB transaction.
+ * Returns the count of inserted rows.
+ * Throws on network failure or non-2xx response.
+ */
+export async function bulkCreateWeakPoints(
+  subjectId: number,
+  weakPoints: Array<{
+    topic: string
+    what_went_wrong: string
+    why_missed: string
+    fix: string
+    status: string
+  }>
+): Promise<{ inserted: number }> {
+  const res = await fetch(`/api/subjects/${subjectId}/weak-points/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ weak_points: weakPoints }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<{ inserted: number }>
 }
 
 /** Create a multi-module quiz synchronously. Returns quiz metadata or an error. */

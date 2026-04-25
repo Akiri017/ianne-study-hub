@@ -53,7 +53,7 @@ beforeEach(() => {
 // ── GET /api/quizzes/:id ──────────────────────────────────────────────────────
 
 describe('GET /api/quizzes/:id', () => {
-  it('returns 200 with parsed questions on valid quiz', async () => {
+  it('returns 200 with parsed questions and subject_id on valid quiz', async () => {
     const fakeRow = {
       id: 1,
       title: 'OS Midterm',
@@ -63,15 +63,40 @@ describe('GET /api/quizzes/:id', () => {
       ]),
       created_at: '2026-04-17T00:00:00Z',
     }
-    mockDb.prepare.mockReturnValueOnce({ get: vi.fn(() => fakeRow) })
+    // First prepare() = quiz row; second = subject_id join via quiz_modules
+    mockDb.prepare
+      .mockReturnValueOnce({ get: vi.fn(() => fakeRow) })
+      .mockReturnValueOnce({ get: vi.fn(() => ({ subject_id: 3 })) })
 
     const res = await fetch(`${baseUrl}/api/quizzes/1`)
     expect(res.status).toBe(200)
 
-    const body = await res.json() as { quiz: { id: number; questions: unknown[] } }
+    const body = await res.json() as { quiz: { id: number; questions: unknown[]; subject_id: number | null } }
     expect(body.quiz.id).toBe(1)
     expect(Array.isArray(body.quiz.questions)).toBe(true)
     expect(body.quiz.questions).toHaveLength(1)
+    expect(body.quiz.subject_id).toBe(3)
+  })
+
+  it('returns subject_id as null when quiz has no linked modules', async () => {
+    const fakeRow = {
+      id: 2,
+      title: 'Orphan Quiz',
+      question_count: 1,
+      questions_json: JSON.stringify([
+        { id: 'uuid-2', type: 'short_answer', question: 'Define scope?', answer: 'Scope = ...', topic: 'PL Basics' },
+      ]),
+      created_at: '2026-04-17T00:00:00Z',
+    }
+    mockDb.prepare
+      .mockReturnValueOnce({ get: vi.fn(() => fakeRow) })
+      .mockReturnValueOnce({ get: vi.fn(() => undefined) }) // no module link
+
+    const res = await fetch(`${baseUrl}/api/quizzes/2`)
+    expect(res.status).toBe(200)
+
+    const body = await res.json() as { quiz: { subject_id: number | null } }
+    expect(body.quiz.subject_id).toBeNull()
   })
 
   it('returns 404 when quiz not found', async () => {

@@ -217,4 +217,87 @@ subjectWeakPoints.post('/', (req: Request, res: Response) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// POST /api/subjects/:subjectId/weak-points/bulk
+// Body: { weak_points: Array<{ topic, what_went_wrong, why_missed, fix, status? }> }
+// Inserts all items in a single SQLite transaction.
+// Returns: { inserted: number }
+// ---------------------------------------------------------------------------
+subjectWeakPoints.post('/bulk', (req: Request, res: Response) => {
+  const subjectId = Number(req.params.subjectId)
+
+  if (!Number.isInteger(subjectId) || subjectId <= 0) {
+    res.status(400).json({ error: 'invalid subjectId' })
+    return
+  }
+
+  const { weak_points } = req.body as { weak_points?: unknown }
+
+  if (!Array.isArray(weak_points) || weak_points.length === 0) {
+    res.status(400).json({ error: 'weak_points must be a non-empty array' })
+    return
+  }
+
+  if (weak_points.length > 50) {
+    res.status(400).json({ error: 'weak_points array exceeds maximum of 50 items' })
+    return
+  }
+
+  // Validate each item before touching the DB — fail fast on bad input.
+  for (let idx = 0; idx < weak_points.length; idx++) {
+    const item = weak_points[idx] as Record<string, unknown>
+    if (typeof item.topic !== 'string' || (item.topic as string).trim() === '') {
+      res.status(400).json({ error: `item[${idx}].topic is required` })
+      return
+    }
+    if (typeof item.what_went_wrong !== 'string' || (item.what_went_wrong as string).trim() === '') {
+      res.status(400).json({ error: `item[${idx}].what_went_wrong is required` })
+      return
+    }
+    if (typeof item.why_missed !== 'string' || (item.why_missed as string).trim() === '') {
+      res.status(400).json({ error: `item[${idx}].why_missed is required` })
+      return
+    }
+    if (typeof item.fix !== 'string' || (item.fix as string).trim() === '') {
+      res.status(400).json({ error: `item[${idx}].fix is required` })
+      return
+    }
+    const resolvedStatus = (item.status as string | undefined) ?? 'Open'
+    if (!VALID_STATUSES.includes(resolvedStatus as Status)) {
+      res.status(400).json({ error: `item[${idx}].status must be one of: ${VALID_STATUSES.join(', ')}` })
+      return
+    }
+  }
+
+  const now = new Date().toISOString()
+  const stmt = db.prepare(
+    `INSERT INTO weak_points (subject_id, topic, what_went_wrong, why_missed, fix, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+
+  try {
+    db.exec('BEGIN')
+    for (const item of weak_points) {
+      const wp = item as Record<string, unknown>
+      const status = ((wp.status as string | undefined) ?? 'Open') as Status
+      stmt.run(
+        subjectId,
+        (wp.topic as string).trim(),
+        (wp.what_went_wrong as string).trim(),
+        (wp.why_missed as string).trim(),
+        (wp.fix as string).trim(),
+        status,
+        now,
+        now
+      )
+    }
+    db.exec('COMMIT')
+    res.status(201).json({ inserted: weak_points.length })
+  } catch (err) {
+    db.exec('ROLLBACK')
+    console.error('[weak-points] POST /bulk error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 export default router

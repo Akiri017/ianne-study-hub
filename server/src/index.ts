@@ -14,6 +14,7 @@ import quizzesRouter, { subjectQuizzes } from './routes/quizzes'
 import weakPointsRouter, { subjectWeakPoints } from './routes/weak-points'
 import tasksRouter, { subjectTasks } from './routes/tasks'
 import reviewerRouter from './routes/reviewer'
+import aiWeakPointsRouter from './routes/ai-weak-points'
 
 const app = express()
 const PORT = process.env.PORT ?? 3000
@@ -57,6 +58,9 @@ api.use('/weak-points', weakPointsRouter)
 
 // Tasks (global + standalone)
 api.use('/tasks', tasksRouter)
+
+// AI utilities
+api.use('/ai/quiz-weak-points', aiWeakPointsRouter)
 
 app.use('/api', api)
 

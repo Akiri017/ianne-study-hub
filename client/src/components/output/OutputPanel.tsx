@@ -14,7 +14,7 @@ import ReactMarkdown from 'react-markdown'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 import SectionLabel from '../ui/SectionLabel'
-import { patchOutput } from '../../lib/api'
+import { patchOutput, generateQuizWeakPointReasons, bulkCreateWeakPoints } from '../../lib/api'
 import { useStreamingOutput } from '../../hooks/useStreamingOutput'
 import type { AiOutput, QuizQuestion } from '../../lib/api'
 
@@ -25,6 +25,7 @@ import type { AiOutput, QuizQuestion } from '../../lib/api'
 interface OutputPanelProps {
   outputType: 'prescan' | 'notes' | 'quiz'
   moduleId: number
+  subjectId?: number
   /** Pass the already-persisted output if it exists for this module+type. */
   existingOutput?: AiOutput | null
   /** Triggered after generation or save so the parent can refetch module data. */
@@ -60,9 +61,10 @@ interface InlineQuizAnswerState {
 
 interface InlineQuizProps {
   content: string
+  subjectId?: number
 }
 
-function InlineQuiz({ content }: InlineQuizProps) {
+function InlineQuiz({ content, subjectId }: InlineQuizProps) {
   let questions: QuizQuestion[] = []
   try {
     questions = JSON.parse(content)
@@ -78,6 +80,9 @@ function InlineQuiz({ content }: InlineQuizProps) {
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState<Record<number, InlineQuizAnswerState>>({})
   const [shortInput, setShortInput] = useState('')
+  const [isLoggingAll, setIsLoggingAll] = useState(false)
+  const [allLogged, setAllLogged] = useState(false)
+  const [logError, setLogError] = useState<string | null>(null)
 
   const handleMcqAnswer = (choice: string) => {
     const correct = choice.trim() === questions[currentIdx].answer.trim()
@@ -128,13 +133,97 @@ function InlineQuiz({ content }: InlineQuizProps) {
 
   if (phase === 'complete') {
     const pct = Math.round((score / questions.length) * 100)
+    const wrongIndices = questions.map((_, i) => i).filter((i) => !answers[i]?.correct)
+
+    const handleLogAll = async () => {
+      if (!subjectId) return
+      setIsLoggingAll(true)
+      setLogError(null)
+      try {
+        const payload = wrongIndices.map((i) => ({
+          id: questions[i].id,
+          question: questions[i].question,
+          correctAnswer: questions[i].answer,
+          userAnswer: answers[i]?.userAnswer ?? '',
+          topic: questions[i].topic,
+        }))
+        const results = await generateQuizWeakPointReasons(payload)
+        const resultMap = new Map(results.map((r) => [r.id, r.why_missed]))
+        const weakPoints = wrongIndices.map((i) => {
+          const q = questions[i]
+          return {
+            topic: q.topic,
+            what_went_wrong: `Incorrectly answered: "${q.question}"`,
+            why_missed: resultMap.get(q.id) ?? 'Could not determine — review manually.',
+            fix: `Correct answer: "${q.answer}"`,
+            status: 'Open' as const,
+          }
+        })
+        await bulkCreateWeakPoints(subjectId, weakPoints)
+        setAllLogged(true)
+      } catch (err) {
+        setLogError(err instanceof Error ? err.message : 'Failed to log weak points.')
+      } finally {
+        setIsLoggingAll(false)
+      }
+    }
+
     return (
-      <div className="flex flex-col items-center gap-6 py-8 px-6 text-center">
-        <div>
+      <div className="flex flex-col gap-6 py-8 px-6">
+        <div className="flex flex-col items-center gap-2 text-center">
           <p className="text-text-primary text-3xl font-mono font-semibold">{score}/{questions.length}</p>
-          <p className={`text-xl font-mono font-semibold mt-1 ${pct >= 70 ? 'text-emerald-400' : 'text-red-400'}`}>{pct}%</p>
+          <p className={`text-xl font-mono font-semibold ${pct >= 70 ? 'text-emerald-400' : 'text-red-400'}`}>{pct}%</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={handleRestart}>Retry</Button>
+
+        {wrongIndices.length === 0 && (
+          <p className="text-emerald-400 text-xs font-mono text-center">Perfect score — no weak points to log!</p>
+        )}
+
+        {wrongIndices.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {subjectId ? (
+              <button
+                onClick={handleLogAll}
+                disabled={isLoggingAll || allLogged}
+                className={`w-full py-2 px-4 rounded-md text-xs font-mono font-semibold border transition-colors ${
+                  allLogged
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 cursor-default'
+                    : isLoggingAll
+                      ? 'border-border-default bg-bg-subtle text-text-muted cursor-default'
+                      : 'border-accent bg-accent/10 text-accent hover:bg-accent hover:text-white'
+                }`}
+              >
+                {allLogged
+                  ? `✓ All ${wrongIndices.length} logged to Weak Points`
+                  : isLoggingAll
+                    ? 'Generating insights…'
+                    : `Log All ${wrongIndices.length} to Weak Points`}
+              </button>
+            ) : (
+              <p className="text-text-muted text-xs font-mono text-center">Bulk logging unavailable — no subject linked.</p>
+            )}
+            {logError && <p className="text-red-400 text-xs font-mono text-center">{logError}</p>}
+
+            <p className="font-mono text-[10px] text-text-muted uppercase tracking-widest">Incorrect ({wrongIndices.length})</p>
+            {wrongIndices.map((i) => {
+              const q = questions[i]
+              return (
+                <div key={i} className="bg-bg-subtle border border-border-default rounded-md p-3 flex flex-col gap-1">
+                  <span className="font-mono text-[10px] text-text-muted uppercase tracking-widest">{q.topic}</span>
+                  <p className="text-text-primary text-xs">{q.question}</p>
+                  <p className="text-xs"><span className="font-mono text-emerald-400">Answer: </span>{q.answer}</p>
+                  {answers[i]?.userAnswer && (
+                    <p className="text-xs"><span className="font-mono text-red-400">You said: </span>{answers[i].userAnswer}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex justify-center">
+          <Button variant="secondary" size="sm" onClick={handleRestart}>Retry</Button>
+        </div>
       </div>
     )
   }
@@ -250,11 +339,12 @@ function InlineQuiz({ content }: InlineQuizProps) {
 interface OutputContentProps {
   content: string
   outputType: 'prescan' | 'notes' | 'quiz'
+  subjectId?: number
 }
 
-function OutputContent({ content, outputType }: OutputContentProps) {
+function OutputContent({ content, outputType, subjectId }: OutputContentProps) {
   if (outputType === 'quiz') {
-    return <InlineQuiz content={content} />
+    return <InlineQuiz content={content} subjectId={subjectId} />
   }
 
   return (
@@ -388,6 +478,7 @@ function RegenerateModal({ isOpen, onClose, onRegenerate, isLoading }: Regenerat
 export default function OutputPanel({
   outputType,
   moduleId,
+  subjectId,
   existingOutput,
   onOutputSaved,
 }: OutputPanelProps) {
@@ -592,7 +683,7 @@ export default function OutputPanel({
           }}
         />
       ) : (
-        <OutputContent content={resolvedContent} outputType={outputType} />
+        <OutputContent content={resolvedContent} outputType={outputType} subjectId={subjectId} />
       )}
 
       {/* Regenerate modal */}

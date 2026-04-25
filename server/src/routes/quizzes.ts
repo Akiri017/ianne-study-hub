@@ -32,6 +32,16 @@ router.get('/:id', (req: Request, res: Response) => {
       return
     }
 
+    // Resolve subject_id from the first linked module (multi-subject quizzes are rare;
+    // we take the first one so the results screen can log weak points).
+    const moduleLink = db.prepare(`
+      SELECT m.subject_id
+      FROM quiz_modules qm
+      JOIN modules m ON m.id = qm.module_id
+      WHERE qm.quiz_id = ?
+      LIMIT 1
+    `).get(id) as { subject_id: number } | undefined
+
     res.json({
       quiz: {
         id: row.id,
@@ -39,6 +49,7 @@ router.get('/:id', (req: Request, res: Response) => {
         question_count: row.question_count,
         questions,
         created_at: row.created_at,
+        subject_id: moduleLink?.subject_id ?? null,
       },
     })
   } catch (err) {

@@ -28,6 +28,7 @@ import weakPointsRouter, { subjectWeakPoints } from '../routes/weak-points'
 // Typed shorthand for the mocked db
 const mockDb = db as unknown as {
   prepare: ReturnType<typeof vi.fn>
+  exec: ReturnType<typeof vi.fn>
 }
 
 // ── Test server ───────────────────────────────────────────────────────────────
@@ -278,6 +279,114 @@ describe('PATCH /api/weak-points/:id', () => {
       body: JSON.stringify({ topic: 'Something' }),
     })
     expect(res.status).toBe(404)
+  })
+})
+
+// ── POST /api/subjects/:subjectId/weak-points/bulk ────────────────────────────
+
+describe('POST /api/subjects/:subjectId/weak-points/bulk', () => {
+  const validItem = {
+    topic: 'Paging',
+    what_went_wrong: 'Confused page tables with segment tables',
+    why_missed: 'Skipped that lecture',
+    fix: 'Re-watch lecture recording and draw a diagram',
+  }
+
+  it('returns 201 with { inserted: N } on valid array', async () => {
+    // prepare() returns { run } for each item; route uses db.exec for BEGIN/COMMIT.
+    mockDb.prepare.mockReturnValue({ run: vi.fn() })
+
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [validItem, { ...validItem, topic: 'Segmentation' }] }),
+    })
+    expect(res.status).toBe(201)
+
+    const body = await res.json() as { inserted: number }
+    expect(body.inserted).toBe(2)
+  })
+
+  it('calls ROLLBACK and returns 500 when a DB insert throws', async () => {
+    const mockExec = db.exec as ReturnType<typeof vi.fn>
+    mockDb.prepare.mockReturnValue({ run: vi.fn().mockImplementationOnce(() => { throw new Error('disk full') }) })
+
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [validItem] }),
+    })
+    expect(res.status).toBe(500)
+
+    // exec should have been called with 'BEGIN' and then 'ROLLBACK'
+    const execCalls = mockExec.mock.calls.map((c: unknown[]) => c[0])
+    expect(execCalls).toContain('ROLLBACK')
+  })
+
+  it('returns 400 when weak_points is missing', async () => {
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toMatch(/non-empty array/)
+  })
+
+  it('returns 400 when weak_points is empty', async () => {
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [] }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 400 when an item is missing a required field', async () => {
+    const { topic: _t, ...noTopic } = validItem
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [noTopic] }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toMatch(/topic/)
+  })
+
+  it('returns 400 when array exceeds 50 items', async () => {
+    const items = Array.from({ length: 51 }, () => validItem)
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: items }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toMatch(/maximum of 50/)
+  })
+
+  it('returns 400 for an invalid status on any item', async () => {
+    const res = await fetch(`${baseUrl}/api/subjects/1/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [{ ...validItem, status: 'BadStatus' }] }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toMatch(/status must be one of/)
+  })
+
+  it('returns 400 for invalid subjectId', async () => {
+    const res = await fetch(`${baseUrl}/api/subjects/0/weak-points/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weak_points: [validItem] }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string }
+    expect(body.error).toMatch(/invalid subjectId/)
   })
 })
 

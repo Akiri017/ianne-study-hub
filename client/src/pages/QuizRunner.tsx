@@ -7,18 +7,18 @@
  * MCQ: click a choice → lock choices + reveal correct/incorrect → Next
  * Short answer: type answer → Submit → reveal correct answer → self-mark → Next
  *
- * On complete: score is saved to fa_sessions. Wrong-answer cards offer
- * a "Log Weak Point" button that pre-fills the weak point create form.
+ * On complete: score is saved to fa_sessions. A single "Log All to Weak Points"
+ * button sends all wrong answers to Gemini for analysis and bulk-inserts them.
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  getQuiz, createSession, completeSession, createWeakPoint, getSubjects,
-  type Quiz, type QuizQuestion, type SessionAnswer, type Subject,
+  getQuiz, createSession, completeSession,
+  generateQuizWeakPointReasons, bulkCreateWeakPoints,
+  type Quiz, type QuizQuestion, type SessionAnswer,
 } from '../lib/api'
 import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,96 +30,6 @@ interface AnswerState {
   userAnswer: string
   correct: boolean
   revealed: boolean
-}
-
-// ---------------------------------------------------------------------------
-// WeakPointModal — pre-filled from a wrong question
-// ---------------------------------------------------------------------------
-
-interface WeakPointModalProps {
-  question: QuizQuestion
-  subjects: Subject[]
-  onSaved: (questionId: string) => void
-  onClose: () => void
-}
-
-function WeakPointModal({ question, subjects, onSaved, onClose }: WeakPointModalProps) {
-  const [topic, setTopic] = useState(question.topic)
-  const [whatWentWrong, setWhatWentWrong] = useState(`Incorrectly answered: "${question.question}"`)
-  const [whyMissed, setWhyMissed] = useState('')
-  const [fix, setFix] = useState(`Correct answer: "${question.answer}"`)
-  const [subjectId, setSubjectId] = useState<number | ''>('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSave = async () => {
-    if (!topic.trim() || !whatWentWrong.trim() || !whyMissed.trim() || !fix.trim()) {
-      setError('All fields are required.')
-      return
-    }
-    if (subjectId === '') {
-      setError('Please select a subject.')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const result = await createWeakPoint(subjectId as number, {
-        topic: topic.trim(),
-        what_went_wrong: whatWentWrong.trim(),
-        why_missed: whyMissed.trim(),
-        fix: fix.trim(),
-        status: 'Open',
-      })
-      if ('error' in result) throw new Error(result.error)
-      onSaved(question.id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Modal isOpen onClose={onClose} maxWidth="md" title="Log Weak Point">
-      <div className="p-6 flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <label className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">Topic</label>
-          <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)}
-            className="h-9 px-3 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">What went wrong</label>
-          <textarea value={whatWentWrong} onChange={(e) => setWhatWentWrong(e.target.value)} rows={2}
-            className="px-3 py-2 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors resize-none" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">Why I missed it</label>
-          <textarea value={whyMissed} onChange={(e) => setWhyMissed(e.target.value)} rows={2}
-            placeholder="e.g. Confused with similar concept, didn't re-read notes…"
-            className="px-3 py-2 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors resize-none" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">Fix / correct answer</label>
-          <textarea value={fix} onChange={(e) => setFix(e.target.value)} rows={2}
-            className="px-3 py-2 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors resize-none" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="font-mono text-xs font-semibold text-text-secondary tracking-widest uppercase">Subject</label>
-          <select value={subjectId} onChange={(e) => setSubjectId(e.target.value === '' ? '' : Number(e.target.value))}
-            className="h-9 px-3 rounded-md bg-bg-subtle border border-border-default text-text-primary text-sm focus:outline-none focus:border-border-strong transition-colors">
-            <option value="">Select subject…</option>
-            {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        {error && <p className="text-error text-xs font-mono">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button variant="primary" size="sm" onClick={handleSave} loading={loading}>Save Weak Point</Button>
-        </div>
-      </div>
-    </Modal>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -248,16 +158,15 @@ export default function QuizRunner() {
   const [answers, setAnswers] = useState<Record<number, AnswerState>>({})
   const [shortAnswerInput, setShortAnswerInput] = useState('')
 
-  const [weakPointQuestion, setWeakPointQuestion] = useState<QuizQuestion | null>(null)
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [loggedWeakPoints, setLoggedWeakPoints] = useState<Set<string>>(new Set())
+  const [isLoggingAll, setIsLoggingAll] = useState(false)
+  const [allLogged, setAllLogged] = useState(false)
+  const [logError, setLogError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!numericQuizId) return
-    Promise.all([getQuiz(numericQuizId), getSubjects()])
-      .then(([{ quiz: q }, { subjects: s }]) => {
+    getQuiz(numericQuizId)
+      .then(({ quiz: q }) => {
         setQuiz(q)
-        setSubjects(s)
         setPhase('intro')
       })
       .catch((err) => {
@@ -273,7 +182,8 @@ export default function QuizRunner() {
       setCurrentIdx(0)
       setAnswers({})
       setShortAnswerInput('')
-      setLoggedWeakPoints(new Set())
+      setAllLogged(false)
+      setLogError(null)
       setPhase('running')
     } catch {
       setLoadError('Failed to start session. Please try again.')
@@ -322,6 +232,51 @@ export default function QuizRunner() {
 
   const score = quiz ? Object.values(answers).filter((a) => a.correct).length : 0
   const wrongIndices = quiz ? quiz.questions.map((_, i) => i).filter((i) => !answers[i]?.correct) : []
+
+  // Bulk-log all wrong answers as weak points using a single Gemini call + bulk insert.
+  const handleLogAllWeakPoints = async () => {
+    if (!quiz || !quiz.subject_id || wrongIndices.length === 0) return
+
+    setIsLoggingAll(true)
+    setLogError(null)
+
+    try {
+      // Build the input for Gemini — one entry per wrong answer.
+      const wrongAnswerInputs = wrongIndices.map((i) => {
+        const q = quiz.questions[i]
+        return {
+          id: q.id,
+          question: q.question,
+          correctAnswer: q.answer,
+          userAnswer: answers[i]?.userAnswer ?? '',
+          topic: q.topic,
+        }
+      })
+
+      // Single Gemini call returns why_missed for each question.
+      const reasons = await generateQuizWeakPointReasons(wrongAnswerInputs)
+      const reasonMap = new Map(reasons.map((r) => [r.id, r.why_missed]))
+
+      // Build weak point objects with AI-generated why_missed field.
+      const weakPoints = wrongIndices.map((i) => {
+        const q = quiz.questions[i]
+        return {
+          topic: q.topic,
+          what_went_wrong: `Incorrectly answered: "${q.question}"`,
+          why_missed: reasonMap.get(q.id) ?? 'Could not determine reason — review this topic manually.',
+          fix: `Correct answer: "${q.answer}"`,
+          status: 'Open',
+        }
+      })
+
+      await bulkCreateWeakPoints(quiz.subject_id, weakPoints)
+      setAllLogged(true)
+    } catch (err) {
+      setLogError(err instanceof Error ? err.message : 'Failed to log weak points. Please try again.')
+    } finally {
+      setIsLoggingAll(false)
+    }
+  }
 
   return (
     <>
@@ -442,16 +397,46 @@ export default function QuizRunner() {
           )}
 
           {wrongIndices.length > 0 && (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
+              {/* Bulk log button — one click sends everything to Gemini + DB */}
+              <div className="flex flex-col gap-2">
+                {quiz.subject_id ? (
+                  <button
+                    onClick={handleLogAllWeakPoints}
+                    disabled={isLoggingAll || allLogged}
+                    className={`w-full py-2 px-4 rounded-md text-sm font-mono font-semibold border transition-colors ${
+                      allLogged
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 cursor-default'
+                        : isLoggingAll
+                          ? 'border-border-default bg-bg-subtle text-text-muted cursor-default'
+                          : 'border-accent bg-accent/10 text-accent hover:bg-accent hover:text-white'
+                    }`}
+                  >
+                    {allLogged
+                      ? `✓ All ${wrongIndices.length} logged to Weak Points`
+                      : isLoggingAll
+                        ? 'Generating insights…'
+                        : `Log All ${wrongIndices.length} to Weak Points`}
+                  </button>
+                ) : (
+                  // No subject_id means quiz was not linked to a module — unlikely but safe to guard.
+                  <p className="text-text-muted text-xs font-mono text-center">
+                    Bulk logging unavailable — this quiz has no linked subject.
+                  </p>
+                )}
+                {logError && (
+                  <p className="text-red-400 text-xs font-mono text-center">{logError}</p>
+                )}
+              </div>
+
               <h2 className="font-mono text-xs text-text-secondary tracking-widest uppercase">
                 Incorrect ({wrongIndices.length})
               </h2>
               {wrongIndices.map((i) => {
                 const q = quiz.questions[i]
-                const logged = loggedWeakPoints.has(q.id)
                 return (
-                  <div key={i} className="bg-bg-surface border border-border-default rounded-md p-4 flex gap-3">
-                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <div key={i} className="bg-bg-surface border border-border-default rounded-md p-4">
+                    <div className="flex flex-col gap-1">
                       <span className="font-mono text-[10px] text-text-muted uppercase tracking-widest">{q.topic}</span>
                       <p className="text-text-primary text-sm">{q.question}</p>
                       <p className="text-xs text-text-muted mt-0.5">
@@ -465,17 +450,6 @@ export default function QuizRunner() {
                         </p>
                       )}
                     </div>
-                    <button
-                      onClick={() => !logged && setWeakPointQuestion(q)}
-                      disabled={logged}
-                      className={`shrink-0 self-start text-xs font-mono px-2 py-1 rounded border transition-colors ${
-                        logged
-                          ? 'border-border-default text-text-muted cursor-default'
-                          : 'border-accent text-accent hover:bg-accent hover:text-white'
-                      }`}
-                    >
-                      {logged ? '✓ Logged' : 'Log Weak Point'}
-                    </button>
                   </div>
                 )
               })}
@@ -488,26 +462,12 @@ export default function QuizRunner() {
               setAnswers({})
               setCurrentIdx(0)
               setShortAnswerInput('')
-              setLoggedWeakPoints(new Set())
               startSession()
             }}>
               Retry Quiz
             </Button>
           </div>
         </div>
-      )}
-
-      {/* Weak point modal — overlays any phase */}
-      {weakPointQuestion && (
-        <WeakPointModal
-          question={weakPointQuestion}
-          subjects={subjects}
-          onSaved={(qId) => {
-            setLoggedWeakPoints((prev) => new Set([...prev, qId]))
-            setWeakPointQuestion(null)
-          }}
-          onClose={() => setWeakPointQuestion(null)}
-        />
       )}
     </>
   )

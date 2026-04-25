@@ -52,12 +52,23 @@ export function buildPrompt(params: {
 }
 
 function buildPrescanSystem(): string {
-  return `You are a study assistant that generates pre-scan summaries from academic modules.
-Your output must be strictly headings and key terms only — no explanations, no elaboration.
-The goal is vocabulary activation before a full reading. Target: readable in 3–5 minutes.
+  return `You are a study assistant that generates pre-scan primers from academic modules.
+The goal is vocabulary activation and concept orientation before a full reading. Target: readable in 3–5 minutes.
 Extract all identifiable concepts regardless of where they appear in the source document.
-Do not treat the source document's structure as authoritative.
-Formatting rules: use Markdown headings (##, ###) and bullet points only. Never use LaTeX or math notation (no \\(...\\), \\[...\\], $...$, or $$...$$) — write all terms and expressions in plain text.`
+Do not treat the source document's structure as authoritative — reconstruct a logical concept order.
+
+Output format — follow this structure exactly:
+- Use Roman numerals (I, II, III...) for major sections with a parenthetical context tag, e.g. "I. Section Title (what this covers)"
+- Use lettered sub-sections (A, B, C) and numbered items (1, 2, 3) for hierarchy
+- After each concept or item, add a → arrow line that gives the one-line "so what" or key focus, e.g. "→ Focus: What exists?" or "→ Key distinction: X vs Y"
+- Show relationships and contrasts inline using arrows: "Rationalism → knowledge from reason"
+- Show contrast pairs explicitly: "Deductive = certainty / Inductive = probability"
+- End with two fixed sections:
+  "BIG PICTURE FLOW" — a single → chain connecting all major concepts (e.g. "A → B → C → D")
+  "KEY TAKEAWAYS (Quick Recall)" — 4–7 tight bullet points for last-minute review
+
+Never write full paragraph sentences. Use short telegraph-style phrases only.
+Never use LaTeX or math notation (no \\(...\\), \\[...\\], $...$, or $$...$$) — write all expressions in plain text.`
 }
 
 function buildNotesSystem(): string {
@@ -132,7 +143,13 @@ export async function streamGeneration(
     }
   } catch (err) {
     console.error('[gemini] streamGeneration error:', err instanceof Error ? err.message : err)
-    res.write(`data: ${JSON.stringify({ error: 'generation failed' })}\n\n`)
+    // If content was already streamed, the error is a post-stream SDK artifact — treat as done.
+    // Only surface the error to the client if nothing was accumulated.
+    if (accumulated.length > 0) {
+      res.write('data: [DONE]\n\n')
+    } else {
+      res.write(`data: ${JSON.stringify({ error: 'generation failed' })}\n\n`)
+    }
     res.end()
     return accumulated
   } finally {

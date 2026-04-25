@@ -87,11 +87,11 @@ describe('buildPrompt — prescan', () => {
     expect(userMessage).toBeTruthy()
   })
 
-  it('system prompt references pre-scan vocabulary activation', () => {
+  it('system prompt references pre-scan primer format', () => {
     const { system } = buildPrompt({ text: 'x', outputType: 'prescan' })
     expect(system).toContain('pre-scan')
-    expect(system).toContain('headings')
-    expect(system).toContain('key terms')
+    expect(system).toContain('Roman numerals')
+    expect(system).toContain('BIG PICTURE FLOW')
   })
 
   it('system prompt forbids LaTeX', () => {

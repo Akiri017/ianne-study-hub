@@ -204,6 +204,7 @@ export default function ModuleView() {
             <OutputPanel
               outputType={key}
               moduleId={numericModuleId}
+              subjectId={numericSubjectId}
               existingOutput={getExistingOutput(key)}
               onOutputSaved={handleOutputSaved}
             />

@@ -33,11 +33,16 @@
 
 **Session 8 — April 17, 2026** — Google AI Studio migration complete. Migrated `claude.ts` from raw Vertex AI fetch to `@google/genai` SDK (`GoogleGenAI`, `generateContentStream`, `generateContent`). Added LaTeX prohibition + Markdown heading rules to `buildPrescanSystem` and `buildNotesSystem`. Renamed `GOOGLE_API_KEY` → `GEMINI_API_KEY`. Rewrote `services-claude.test.ts` with `vi.hoisted()` + regular-function constructor mock. 173 tests passing. TS clean.
 
+**Session 9 — April 18, 2026** — Bug fixes: sidebar toggle, notes persistence, breadcrumb names, tasks POST; inline quiz runner; AI note bridging. 178 tests passing.
+
+**Session 10 — April 21, 2026** — Bug fixes: "No" button variant, modules API content field, persistence audit; reviewer export (DOCX+PDF); subject delete. 188 tests passing.
+
+**Session 11 — April 21, 2026** — Fixed regeneration stale content bug by prioritizing streaming chunks over DB payload. Added unit tests for `useStreamingOutput` hook with `@testing-library/react` and `jsdom`. 188 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
 - Single-module quiz raw JSON in OutputPanel — full runner integration deferred
-- Client-side `useStreamingOutput` hook has no unit tests — needs `@testing-library/react` + `jsdom` (not yet installed)
 
 ---
 
@@ -103,3 +108,6 @@
 | 2026-04-17 | QA | Session 7 verification | Complete — 176 tests passing, TS clean |
 | 2026-04-17 | Developer | Google AI Studio migration + prompt refinements | Complete |
 | 2026-04-17 | QA | Session 8 verification | Complete — 173 tests passing, TS clean |
+| 2026-04-18 | QA | Session 9 verification | Complete — 178 tests passing |
+| 2026-04-21 | QA | Session 10 verification | Complete — 188 tests passing |
+| 2026-04-21 | CI/CD | Session 11 commit | Complete — 07fa1d4 |
