@@ -1,14 +1,14 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 12 complete
+**Status:** In progress — Session 14 complete
 
 ---
 
 ## Completed Tasks
 
 - [x] Project scaffolding — monorepo setup (client + server + shared), Vite config, Tailwind + design tokens, Express bootstrap, SQLite singleton, `.env.example`, `.gitignore`
-- [x] Database schema — `schema.sql` with all 8 tables, FK constraints, cascade deletes; auto-runs on server start via `db.exec()`; migration stub `001_initial_schema.ts`
+- [x] Database schema — `schema.sql` with all 9 tables, FK constraints, cascade deletes; auto-runs on server start via `db.exec()`; migration stub `001_initial_schema.ts`
 - [x] App shell — Sidebar (subject list, expand/collapse, NewSubjectModal), Topbar (breadcrumb, right panel toggle), StatusBar (streaming indicator, clock), RightPanel (WEAK POINTS / TASKS tabs, placeholder), DashboardPage (stats strip, empty states); React Router wired; shared UI primitives (Button, Badge, Modal, SectionLabel)
 - [x] Claude proxy + SSE streaming — `streamGeneration()` with SSE relay, 30s AbortController timeout, prompt caching on system block; prompt builders for prescan/notes/quiz per PRD §9; `POST /modules/:id/generate`, `POST /outputs/:id/regenerate` (SSE); `GET /outputs/:id`, `PATCH /outputs/:id`; `useStreamingOutput` hook (idle/streaming/done/error); typed API wrappers in `client/src/lib/api.ts`
 - [x] AI Output Viewer — `OutputPanel` component (not-generated/streaming/generated states, react-markdown, quiz raw JSON, inline editor, RegenerateModal); `ModuleView` (Pre-Scan/Notes/Quiz tab bar, dot indicators, key remount); `SubjectView` (header, UploadZone click-to-upload, ModuleCard list); `ModuleCard` output chips; Sidebar NavLink fix + real module list; routes registered in `App.tsx`
@@ -41,6 +41,10 @@
 
 **Session 12 — April 26, 2026** — Bulk weak points from quiz results. Added `POST /api/ai/quiz-weak-points` (single Gemini call, generates `why_missed` for all wrong answers). Added `POST /api/subjects/:subjectId/weak-points/bulk` (batch insert, manual BEGIN/COMMIT/ROLLBACK for `node:sqlite` compatibility). Replaced per-question log buttons with a single "Log All to Weak Points" button in both `QuizRunner` and `InlineQuiz` (OutputPanel). Fixed quiz streaming "generation failed" false positive (post-stream SDK throw now only errors if no content was accumulated). Updated prescan Gemini prompt to primer format (Roman numerals, → arrows, contrast pairs, BIG PICTURE FLOW, KEY TAKEAWAYS). QA ran for first time this session — fixed stale transaction mock and added ROLLBACK path test. 208 tests passing. TS clean.
 
+**Session 13 — April 28, 2026** — Inline Reviewer Tab. Replaced file export with inline markdown display. Added `GET /api/subjects/:subjectId/reviewer` and `ReviewerPanel` component. Tests updated. 214 tests passing. TS clean.
+
+**Session 14 — April 28, 2026** — Reviewer persistence bug fix. `GET /reviewer` was re-generating on every load with no DB write, losing content on navigation. Split into: `GET /` (reads `subject_reviewers` table, no AI call) and `POST /generate` (Gemini + upsert). Added `subject_reviewers` table (UNIQUE on subject_id, CASCADE on subject delete). Frontend updated: `useEffect` on mount loads persisted content; `generateReviewer` replaces `getReviewer` on button actions. `db-schema.test.ts` updated to expect 9 tables. 216 tests passing. TS clean.
+
 **Known deferred items:**
 - Breadcrumb subject/module names show IDs only — name resolution needs a context or state lift (follow-up)
 - StatusBar streaming indicator not wired to OutputPanel — needs a context or prop lift (follow-up)
@@ -52,7 +56,7 @@
 
 ### Must (required for v1)
 - [x] Project scaffolding — monorepo setup (client + server + shared), Vite config, Tailwind, Express bootstrap, SQLite init, `.env` wiring
-- [x] Database schema — run `schema.sql`, all tables: subjects, modules, ai_outputs, quizzes, quiz_modules, fa_sessions, weak_points, tasks
+- [x] Database schema — run `schema.sql`, all tables: subjects, modules, ai_outputs, quizzes, quiz_modules, fa_sessions, weak_points, tasks, subject_reviewers
 - [x] Subject CRUD — `GET/POST/DELETE /subjects`; sidebar subject tree renders subjects, create/delete works
 - [x] Module upload — `POST /subjects/:id/modules/upload`; Multer config (20MB, PDF+DOCX only); file saved to `/uploads`; module row inserted
 - [x] File parsing — pdf-parse + mammoth text extraction service (`server/src/services/parser.ts`)
@@ -117,3 +121,8 @@
 | 2026-04-26 | Developer | Prescan primer prompt + quiz streaming fix + InlineQuiz bulk UI | Complete |
 | 2026-04-26 | QA | Session 12 verification — fix stale transaction mock, add ROLLBACK test | Complete — 208 tests passing, TS clean |
 | 2026-04-26 | CI/CD | Session 12 commit | Complete — ecea9dd |
+| 2026-04-28 | Developer | Inline Reviewer Tab | Complete |
+| 2026-04-28 | QA | Session 13 verification | Complete — 214 tests passing, TS clean |
+| 2026-04-28 | CI/CD | Session 13 commit | Complete — 6159433 |
+| 2026-04-28 | Developer | Reviewer persistence bug fix — subject_reviewers table, GET/POST split, frontend useEffect | Complete |
+| 2026-04-28 | QA | Session 14 verification — caught missing db-schema.test.ts update, PM patched | Complete — 216 tests passing, TS clean |

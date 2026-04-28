@@ -360,10 +360,26 @@ export async function exportReviewer(
 }
 
 /**
- * Gets the reviewer content (Markdown) for a subject's weak points.
+ * Gets the persisted reviewer content (Markdown) for a subject.
+ * Returns { content: null } when no reviewer has been generated yet.
  */
-export async function getReviewer(subjectId: number): Promise<{ content: string }> {
+export async function getReviewer(subjectId: number): Promise<{ content: string | null }> {
   const res = await fetch(`/api/subjects/${subjectId}/reviewer`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Generates (or regenerates) the reviewer for a subject and persists it.
+ */
+export async function generateReviewer(subjectId: number): Promise<{ content: string }> {
+  const res = await fetch(`/api/subjects/${subjectId}/reviewer/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
     throw new Error(body.error ?? `HTTP ${res.status}`)

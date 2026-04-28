@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Button from '../ui/Button'
 import SectionLabel from '../ui/SectionLabel'
-import { getReviewer } from '../../lib/api'
+import { getReviewer, generateReviewer } from '../../lib/api'
 
 interface ReviewerPanelProps {
   subjectId: number
@@ -11,19 +11,66 @@ interface ReviewerPanelProps {
 export default function ReviewerPanel({ subjectId }: ReviewerPanelProps) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // True while the initial GET resolves on mount — shows a neutral spinner,
+  // not the "GENERATING" label (this is a fast DB read, not an AI call).
+  const [loadingInitial, setLoadingInitial] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // On mount (or when subjectId changes), fetch the persisted reviewer from DB.
+  useEffect(() => {
+    let cancelled = false
+
+    setLoadingInitial(true)
+    setContent(null)
+    setError(null)
+
+    getReviewer(subjectId)
+      .then((data) => {
+        if (cancelled) return
+        if (data.content !== null) {
+          setContent(data.content)
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Failed to load reviewer.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingInitial(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [subjectId])
+
+  // Called by the "Generate Reviewer" and "Regenerate" buttons.
+  // Hits POST /generate which runs the AI call and persists the result.
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getReviewer(subjectId)
+      const data = await generateReviewer(subjectId)
       setContent(data.content)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate reviewer.')
     } finally {
       setLoading(false)
     }
+  }
+
+  // Neutral spinner while the initial DB read completes
+  if (loadingInitial) {
+    return (
+      <div className="flex flex-col gap-4 p-6">
+        <div className="flex items-center justify-between">
+          <SectionLabel>SUBJECT REVIEWER</SectionLabel>
+        </div>
+        <div className="text-text-primary text-sm font-mono whitespace-pre-wrap leading-relaxed min-h-[200px]">
+          <span className="animate-pulse text-accent">▋</span>
+        </div>
+      </div>
+    )
   }
 
   if (!content && !loading) {

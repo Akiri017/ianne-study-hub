@@ -139,9 +139,49 @@ Write in clear, concise academic prose. Output Markdown only — no code blocks 
 
 // ---------------------------------------------------------------------------
 // GET /
+// No AI call — reads the persisted reviewer from DB (or returns null).
 // ---------------------------------------------------------------------------
 
 router.get('/', async (req: Request, res: Response) => {
+  const subjectId = Number((req.params as Record<string, string>).subjectId)
+
+  if (!Number.isInteger(subjectId) || subjectId <= 0) {
+    res.status(404).json({ error: 'Subject not found.' })
+    return
+  }
+
+  try {
+    const subject = db
+      .prepare('SELECT id, name FROM subjects WHERE id = ?')
+      .get(subjectId) as { id: number; name: string } | undefined
+
+    if (!subject) {
+      res.status(404).json({ error: 'Subject not found.' })
+      return
+    }
+
+    const row = db
+      .prepare('SELECT content FROM subject_reviewers WHERE subject_id = ?')
+      .get(subjectId) as { content: string } | undefined
+
+    if (row) {
+      res.json({ content: row.content })
+    } else {
+      // No reviewer generated yet — frontend handles the empty state
+      res.json({ content: null })
+    }
+  } catch (err) {
+    console.error('[reviewer] GET / error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /generate
+// Calls Gemini, upserts the result into subject_reviewers, returns content.
+// ---------------------------------------------------------------------------
+
+router.post('/generate', async (req: Request, res: Response) => {
   const subjectId = Number((req.params as Record<string, string>).subjectId)
 
   if (!Number.isInteger(subjectId) || subjectId <= 0) {
@@ -169,7 +209,7 @@ router.get('/', async (req: Request, res: Response) => {
       .all(subjectId) as unknown as WeakPointRow[]
 
     if (weakPoints.length === 0) {
-      res.status(400).json({ error: 'No weak points to review.' })
+      res.status(400).json({ error: 'No weak points to generate a reviewer from.' })
       return
     }
 
@@ -194,6 +234,7 @@ Write in clear, concise academic prose. Output Markdown only — no code blocks 
       `Generate a study reviewer for the subject "${subject.name}" based on these confirmed weak points:\n\n` +
       weakPointsText
 
+    // Race Gemini against a 30s hard timeout — SDK doesn't accept a signal directly
     const generatePromise = ai.models.generateContent({
       model: MODEL,
       config: { systemInstruction },
@@ -211,9 +252,18 @@ Write in clear, concise academic prose. Output Markdown only — no code blocks 
       return
     }
 
+    // Upsert into subject_reviewers — one row per subject, replace on conflict
+    db.prepare(
+      `INSERT INTO subject_reviewers (subject_id, content, generated_at)
+       VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+       ON CONFLICT(subject_id) DO UPDATE SET
+         content = excluded.content,
+         generated_at = excluded.generated_at`
+    ).run(subjectId, reviewerMarkdown)
+
     res.json({ content: reviewerMarkdown })
   } catch (err) {
-    console.error('[reviewer] GET / error:', err)
+    console.error('[reviewer] POST /generate error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 })

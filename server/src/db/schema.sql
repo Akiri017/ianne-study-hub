@@ -95,3 +95,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_date   TEXT    NOT NULL,   -- YYYY-MM-DD
   completed  INTEGER NOT NULL DEFAULT 0
 );
+
+-- 9. subject_reviewers
+--    Persists the most recent AI-generated reviewer for each subject.
+--    One row per subject (UNIQUE). Upserted on every generate.
+CREATE TABLE IF NOT EXISTS subject_reviewers (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_id   INTEGER NOT NULL UNIQUE REFERENCES subjects(id) ON DELETE CASCADE,
+  content      TEXT    NOT NULL,
+  generated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);

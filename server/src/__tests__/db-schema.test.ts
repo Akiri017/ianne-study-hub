@@ -51,12 +51,13 @@ describe('Database schema', () => {
     'modules',
     'quiz_modules',
     'quizzes',
+    'subject_reviewers',
     'subjects',
     'tasks',
     'weak_points',
   ]
 
-  it('creates all 8 expected tables', () => {
+  it('creates all 9 expected tables', () => {
     const db = createTestDb()
     const tables = getTableNames(db)
     for (const table of EXPECTED_TABLES) {
