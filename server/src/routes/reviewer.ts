@@ -2,7 +2,7 @@
  * Reviewer export route.
  * POST /api/subjects/:subjectId/reviewer/export
  *
- * Generates a structured study reviewer from all Confirmed weak points
+ * Generates a structured study reviewer from all weak points
  * for a subject, then exports it as DOCX or PDF via Gemini + exporter service.
  */
 
@@ -58,18 +58,18 @@ router.post('/export', async (req: Request, res: Response) => {
       return
     }
 
-    // Fetch all Confirmed weak points for this subject, oldest first
+    // Fetch all weak points for this subject, oldest first
     const weakPoints = db
       .prepare(
         `SELECT id, topic, what_went_wrong, why_missed, fix, created_at
          FROM weak_points
-         WHERE subject_id = ? AND status = 'Confirmed'
+         WHERE subject_id = ?
          ORDER BY created_at ASC`
       )
       .all(subjectId) as unknown as WeakPointRow[]
 
     if (weakPoints.length === 0) {
-      res.status(400).json({ error: 'No confirmed weak points to export.' })
+      res.status(400).json({ error: 'No weak points to export.' })
       return
     }
 
@@ -133,6 +133,87 @@ Write in clear, concise academic prose. Output Markdown only — no code blocks 
     }
   } catch (err) {
     console.error('[reviewer] POST /export error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// GET /
+// ---------------------------------------------------------------------------
+
+router.get('/', async (req: Request, res: Response) => {
+  const subjectId = Number((req.params as Record<string, string>).subjectId)
+
+  if (!Number.isInteger(subjectId) || subjectId <= 0) {
+    res.status(404).json({ error: 'Subject not found.' })
+    return
+  }
+
+  try {
+    const subject = db
+      .prepare('SELECT id, name FROM subjects WHERE id = ?')
+      .get(subjectId) as { id: number; name: string } | undefined
+
+    if (!subject) {
+      res.status(404).json({ error: 'Subject not found.' })
+      return
+    }
+
+    const weakPoints = db
+      .prepare(
+        `SELECT id, topic, what_went_wrong, why_missed, fix, created_at
+         FROM weak_points
+         WHERE subject_id = ?
+         ORDER BY created_at ASC`
+      )
+      .all(subjectId) as unknown as WeakPointRow[]
+
+    if (weakPoints.length === 0) {
+      res.status(400).json({ error: 'No weak points to review.' })
+      return
+    }
+
+    const weakPointsText = weakPoints
+      .map(
+        (wp, i) =>
+          `[Weak Point ${i + 1}]\n` +
+          `Topic: ${wp.topic}\n` +
+          `What went wrong: ${wp.what_went_wrong}\n` +
+          `Why missed: ${wp.why_missed}\n` +
+          `How to fix/remember: ${wp.fix}`
+      )
+      .join('\n\n')
+
+    const systemInstruction = `You are a study assistant that generates structured reviewer documents.
+Given a list of confirmed weak points from a student's study session, produce a study reviewer in Markdown.
+For each weak point: explain the core concept clearly, describe what went wrong and why, then provide a focused explanation of how to fix or remember it.
+Use ## headings for each weak point topic. Use ### for sub-sections (Concept, What Went Wrong, Why Missed, How to Fix).
+Write in clear, concise academic prose. Output Markdown only — no code blocks wrapping the entire output.`
+
+    const userMessage =
+      `Generate a study reviewer for the subject "${subject.name}" based on these confirmed weak points:\n\n` +
+      weakPointsText
+
+    const generatePromise = ai.models.generateContent({
+      model: MODEL,
+      config: { systemInstruction },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    })
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Generation timed out after 30s')), 30_000)
+    )
+
+    const response = await Promise.race([generatePromise, timeoutPromise])
+    const reviewerMarkdown = response.text ?? ''
+
+    if (!reviewerMarkdown.trim()) {
+      res.status(500).json({ error: 'AI generation returned empty content.' })
+      return
+    }
+
+    res.json({ content: reviewerMarkdown })
+  } catch (err) {
+    console.error('[reviewer] GET / error:', err)
     res.status(500).json({ error: 'Internal server error' })
   }
 })

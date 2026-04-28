@@ -359,6 +359,18 @@ export async function exportReviewer(
   return res.blob()
 }
 
+/**
+ * Gets the reviewer content (Markdown) for a subject's weak points.
+ */
+export async function getReviewer(subjectId: number): Promise<{ content: string }> {
+  const res = await fetch(`/api/subjects/${subjectId}/reviewer`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+    throw new Error(body.error ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 // ---------------------------------------------------------------------------
 // AI — quiz weak point reason generation
 // ---------------------------------------------------------------------------

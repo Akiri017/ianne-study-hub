@@ -195,22 +195,22 @@ describe('POST /api/subjects/:subjectId/reviewer/export — PDF', () => {
   })
 })
 
-// ── POST /export — 400 no confirmed weak points ───────────────────────────────
+// ── POST /export — 400 no weak points ───────────────────────────────
 
-describe('POST /api/subjects/:subjectId/reviewer/export — 400 no confirmed weak points', () => {
-  it('returns 400 when the subject has no Confirmed weak points', async () => {
+describe('POST /api/subjects/:subjectId/reviewer/export — 400 no weak points', () => {
+  it('returns 400 when the subject has no weak points', async () => {
     mockDb.prepare
       .mockReturnValueOnce({ get: vi.fn(() => fakeSubject) })   // subject found
-      .mockReturnValueOnce({ all: vi.fn(() => []) })            // no confirmed WPs
+      .mockReturnValueOnce({ all: vi.fn(() => []) })            // no WPs
 
     const res = await postExport(1, { format: 'docx' })
     expect(res.status).toBe(400)
 
     const body = await res.json() as { error: string }
-    expect(body.error).toBe('No confirmed weak points to export.')
+    expect(body.error).toBe('No weak points to export.')
   })
 
-  it('does not call Gemini when there are no confirmed weak points', async () => {
+  it('does not call Gemini when there are no weak points', async () => {
     mockDb.prepare
       .mockReturnValueOnce({ get: vi.fn(() => fakeSubject) })
       .mockReturnValueOnce({ all: vi.fn(() => []) })
@@ -249,5 +249,78 @@ describe('POST /api/subjects/:subjectId/reviewer/export — validation', () => {
 
     const body = await res.json() as { error: string }
     expect(body.error).toContain('format')
+  })
+})
+
+// ── GET / — 200 JSON Response ────────────────────────────────────────────────
+
+async function getReviewer(subjectId: number | string) {
+  return fetch(`${baseUrl}/api/subjects/${subjectId}/reviewer`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+describe('GET /api/subjects/:subjectId/reviewer', () => {
+  it('returns 200 with reviewer markdown content', async () => {
+    setupHappyPathDb()
+
+    const res = await getReviewer(1)
+    expect(res.status).toBe(200)
+
+    const contentType = res.headers.get('content-type') ?? ''
+    expect(contentType).toContain('application/json')
+
+    const body = await res.json() as { content: string }
+    expect(body.content).toBe('## Topic\nSome reviewer content.')
+  })
+
+  it('calls Gemini to generate content', async () => {
+    setupHappyPathDb()
+
+    await getReviewer(1)
+
+    expect(mockGenerateContent).toHaveBeenCalledOnce()
+    const callArgs = mockGenerateContent.mock.calls[0][0]
+    expect(callArgs.model).toBeDefined()
+    expect(callArgs.contents[0].parts[0].text).toContain(fakeSubject.name)
+  })
+
+  it('returns 400 when the subject has no weak points', async () => {
+    mockDb.prepare
+      .mockReturnValueOnce({ get: vi.fn(() => fakeSubject) })
+      .mockReturnValueOnce({ all: vi.fn(() => []) })
+
+    const res = await getReviewer(1)
+    expect(res.status).toBe(400)
+
+    const body = await res.json() as { error: string }
+    expect(body.error).toBe('No weak points to review.')
+  })
+
+  it('returns 404 when the subject does not exist', async () => {
+    mockDb.prepare.mockReturnValueOnce({ get: vi.fn(() => undefined) })
+
+    const res = await getReviewer(999)
+    expect(res.status).toBe(404)
+
+    const body = await res.json() as { error: string }
+    expect(body.error).toBe('Subject not found.')
+  })
+
+  it('returns 404 for a non-integer subjectId', async () => {
+    const res = await getReviewer('abc')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 500 when AI generation returns empty content', async () => {
+    setupHappyPathDb()
+    mockGenerateContent.mockResolvedValueOnce({ text: '' })
+
+    const res = await getReviewer(1)
+    expect(res.status).toBe(500)
+
+    const body = await res.json() as { error: string }
+    expect(body.error).toBe('AI generation returned empty content.')
   })
 })

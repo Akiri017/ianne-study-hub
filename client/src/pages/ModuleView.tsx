@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Badge from '../components/ui/Badge'
 import OutputPanel from '../components/output/OutputPanel'
+import ReviewerPanel from '../components/output/ReviewerPanel'
 import { getModules, getSubjects } from '../lib/api'
 import type { Module, AiOutput } from '../lib/api'
 import { useAppContext } from '../lib/app-context'
@@ -20,12 +21,13 @@ import { useAppContext } from '../lib/app-context'
 // Types
 // ---------------------------------------------------------------------------
 
-type OutputTab = 'prescan' | 'notes' | 'quiz'
+type OutputTab = 'prescan' | 'notes' | 'quiz' | 'reviewer'
 
 const TABS: { key: OutputTab; label: string }[] = [
   { key: 'prescan', label: 'Pre-Scan' },
   { key: 'notes', label: 'Structured Notes' },
   { key: 'quiz', label: 'Quiz' },
+  { key: 'reviewer', label: 'Reviewer' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -201,13 +203,17 @@ export default function ModuleView() {
       <div className="bg-bg-surface border border-border-default rounded-md overflow-hidden">
         {TABS.map(({ key }) => (
           <div key={key} className={activeTab === key ? '' : 'hidden'}>
-            <OutputPanel
-              outputType={key}
-              moduleId={numericModuleId}
-              subjectId={numericSubjectId}
-              existingOutput={getExistingOutput(key)}
-              onOutputSaved={handleOutputSaved}
-            />
+            {key === 'reviewer' ? (
+              <ReviewerPanel subjectId={numericSubjectId} />
+            ) : (
+              <OutputPanel
+                outputType={key as 'prescan' | 'notes' | 'quiz'}
+                moduleId={numericModuleId}
+                subjectId={numericSubjectId}
+                existingOutput={getExistingOutput(key)}
+                onOutputSaved={handleOutputSaved}
+              />
+            )}
           </div>
         ))}
       </div>
