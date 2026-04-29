@@ -517,11 +517,15 @@ export default function SubjectView() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionLabel>Modules</SectionLabel>
-          {modules.length >= 2 && (
-            <Button variant="secondary" size="sm" onClick={() => setQuizModalOpen(true)}>
-              Generate Multi-Module Quiz
-            </Button>
-          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setQuizModalOpen(true)}
+            disabled={modules.length < 2}
+            title={modules.length < 2 ? 'Upload at least 2 modules to generate a multi-module quiz' : undefined}
+          >
+            Generate Multi-Module Quiz
+          </Button>
         </div>
 
         {/* Success message after quiz creation — auto-clears after 3s */}
