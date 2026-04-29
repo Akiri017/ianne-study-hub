@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 14 complete
+**Status:** In progress — Session 15 complete
 
 ---
 
@@ -42,6 +42,8 @@
 **Session 12 — April 26, 2026** — Bulk weak points from quiz results. Added `POST /api/ai/quiz-weak-points` (single Gemini call, generates `why_missed` for all wrong answers). Added `POST /api/subjects/:subjectId/weak-points/bulk` (batch insert, manual BEGIN/COMMIT/ROLLBACK for `node:sqlite` compatibility). Replaced per-question log buttons with a single "Log All to Weak Points" button in both `QuizRunner` and `InlineQuiz` (OutputPanel). Fixed quiz streaming "generation failed" false positive (post-stream SDK throw now only errors if no content was accumulated). Updated prescan Gemini prompt to primer format (Roman numerals, → arrows, contrast pairs, BIG PICTURE FLOW, KEY TAKEAWAYS). QA ran for first time this session — fixed stale transaction mock and added ROLLBACK path test. 208 tests passing. TS clean.
 
 **Session 13 — April 28, 2026** — Inline Reviewer Tab. Replaced file export with inline markdown display. Added `GET /api/subjects/:subjectId/reviewer` and `ReviewerPanel` component. Tests updated. 214 tests passing. TS clean.
+
+**Session 15 — April 29, 2026** — Multi-module quiz button UX. Button in SubjectView was conditionally hidden when `modules.length < 2`; now always visible and disabled with a tooltip when fewer than 2 modules are uploaded. 214 tests passing. TS clean.
 
 **Session 14 — April 28, 2026** — Reviewer persistence bug fix. `GET /reviewer` was re-generating on every load with no DB write, losing content on navigation. Split into: `GET /` (reads `subject_reviewers` table, no AI call) and `POST /generate` (Gemini + upsert). Added `subject_reviewers` table (UNIQUE on subject_id, CASCADE on subject delete). Frontend updated: `useEffect` on mount loads persisted content; `generateReviewer` replaces `getReviewer` on button actions. `db-schema.test.ts` updated to expect 9 tables. 216 tests passing. TS clean.
 
@@ -126,3 +128,6 @@
 | 2026-04-28 | CI/CD | Session 13 commit | Complete — 6159433 |
 | 2026-04-28 | Developer | Reviewer persistence bug fix — subject_reviewers table, GET/POST split, frontend useEffect | Complete |
 | 2026-04-28 | QA | Session 14 verification — caught missing db-schema.test.ts update, PM patched | Complete — 216 tests passing, TS clean |
+| 2026-04-29 | PM | Multi-module quiz button visibility fix — SubjectView always shows button, disabled when < 2 modules | Complete |
+| 2026-04-29 | QA | Session 15 verification | Complete — 214 tests passing, TS clean |
+| 2026-04-29 | CI/CD | Session 15 commit | Complete — 5ed4b1c |
