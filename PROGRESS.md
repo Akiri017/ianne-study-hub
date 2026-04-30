@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 15 complete
+**Status:** In progress — Session 16 complete
 
 ---
 
@@ -44,6 +44,8 @@
 **Session 13 — April 28, 2026** — Inline Reviewer Tab. Replaced file export with inline markdown display. Added `GET /api/subjects/:subjectId/reviewer` and `ReviewerPanel` component. Tests updated. 214 tests passing. TS clean.
 
 **Session 15 — April 29, 2026** — Multi-module quiz button UX. Button in SubjectView was conditionally hidden when `modules.length < 2`; now always visible and disabled with a tooltip when fewer than 2 modules are uploaded. 214 tests passing. TS clean.
+
+**Session 16 — April 30, 2026** — Inline note annotations. Users can highlight text in structured notes, attach a comment, edit on blur (P4), and delete. Annotations persist to SQLite (`note_annotations` table, cascade on module delete). Backend: GET/POST/PATCH/DELETE under `/api/modules/:id/annotations`. Frontend: selection handler, markdown pre-pass highlight injection via custom ReactMarkdown components mapper (rehype-sanitize compliant), popover with view/edit/delete modes. 241 tests passing. TS clean.
 
 **Session 14 — April 28, 2026** — Reviewer persistence bug fix. `GET /reviewer` was re-generating on every load with no DB write, losing content on navigation. Split into: `GET /` (reads `subject_reviewers` table, no AI call) and `POST /generate` (Gemini + upsert). Added `subject_reviewers` table (UNIQUE on subject_id, CASCADE on subject delete). Frontend updated: `useEffect` on mount loads persisted content; `generateReviewer` replaces `getReviewer` on button actions. `db-schema.test.ts` updated to expect 9 tables. 216 tests passing. TS clean.
 

@@ -17,6 +17,7 @@ import SectionLabel from '../ui/SectionLabel'
 import { patchOutput, generateQuizWeakPointReasons, bulkCreateWeakPoints } from '../../lib/api'
 import { useStreamingOutput } from '../../hooks/useStreamingOutput'
 import type { AiOutput, QuizQuestion } from '../../lib/api'
+import AnnotatedNotes from './AnnotatedNotes'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -340,11 +341,16 @@ interface OutputContentProps {
   content: string
   outputType: 'prescan' | 'notes' | 'quiz'
   subjectId?: number
+  moduleId: number
 }
 
-function OutputContent({ content, outputType, subjectId }: OutputContentProps) {
+function OutputContent({ content, outputType, subjectId, moduleId }: OutputContentProps) {
   if (outputType === 'quiz') {
     return <InlineQuiz content={content} subjectId={subjectId} />
+  }
+
+  if (outputType === 'notes') {
+    return <AnnotatedNotes content={content} moduleId={moduleId} />
   }
 
   return (
@@ -683,7 +689,7 @@ export default function OutputPanel({
           }}
         />
       ) : (
-        <OutputContent content={resolvedContent} outputType={outputType} subjectId={subjectId} />
+        <OutputContent content={resolvedContent} outputType={outputType} subjectId={subjectId} moduleId={moduleId} />
       )}
 
       {/* Regenerate modal */}
