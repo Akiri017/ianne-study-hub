@@ -15,6 +15,7 @@ import weakPointsRouter, { subjectWeakPoints } from './routes/weak-points'
 import tasksRouter, { subjectTasks } from './routes/tasks'
 import reviewerRouter from './routes/reviewer'
 import aiWeakPointsRouter from './routes/ai-weak-points'
+import annotationsRouter from './routes/annotations'
 
 const app = express()
 const PORT = process.env.PORT ?? 3000
@@ -41,6 +42,9 @@ api.use('/subjects/:subjectId/reviewer', reviewerRouter)
 
 // Modules (standalone delete)
 api.use('/modules', deleteModule)
+
+// Annotations
+api.use('/modules/:moduleId/annotations', annotationsRouter)
 
 // AI generation
 api.use('/modules/:moduleId/generate', generateRouter)

@@ -158,6 +158,47 @@ export const regenerateOutput = (
   })
 
 // ---------------------------------------------------------------------------
+// Note Annotations
+// ---------------------------------------------------------------------------
+
+export interface NoteAnnotation {
+  id: number
+  module_id: number
+  selected_text: string
+  comment: string
+  char_offset: number
+  created_at: string
+}
+
+export const getAnnotations = (moduleId: number): Promise<{ annotations: NoteAnnotation[] }> =>
+  fetch(`/api/modules/${moduleId}/annotations`).then((r) => r.json())
+
+export const createAnnotation = (
+  moduleId: number,
+  data: { selected_text: string; comment: string; char_offset: number }
+): Promise<{ annotation: NoteAnnotation } | { error: string }> =>
+  request(`/modules/${moduleId}/annotations`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+
+export const updateAnnotation = (
+  moduleId: number,
+  annId: number,
+  comment: string
+): Promise<{ annotation: NoteAnnotation } | { error: string }> =>
+  request(`/modules/${moduleId}/annotations/${annId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ comment }),
+  })
+
+export const deleteAnnotation = (
+  moduleId: number,
+  annId: number
+): Promise<{ deleted: boolean } | { error: string }> =>
+  request(`/modules/${moduleId}/annotations/${annId}`, { method: 'DELETE' })
+
+// ---------------------------------------------------------------------------
 // Weak Points
 // ---------------------------------------------------------------------------
 

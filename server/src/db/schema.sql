@@ -105,3 +105,14 @@ CREATE TABLE IF NOT EXISTS subject_reviewers (
   content      TEXT    NOT NULL,
   generated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- 10. note_annotations
+--     Inline annotations attached to module text.
+CREATE TABLE IF NOT EXISTS note_annotations (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  module_id     INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+  selected_text TEXT NOT NULL,
+  comment       TEXT NOT NULL,
+  char_offset   INTEGER,
+  created_at    TEXT DEFAULT (datetime('now'))
+);

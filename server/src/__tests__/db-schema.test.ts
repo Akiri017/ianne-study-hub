@@ -49,6 +49,7 @@ describe('Database schema', () => {
     'ai_outputs',
     'fa_sessions',
     'modules',
+    'note_annotations',
     'quiz_modules',
     'quizzes',
     'subject_reviewers',
@@ -57,7 +58,7 @@ describe('Database schema', () => {
     'weak_points',
   ]
 
-  it('creates all 9 expected tables', () => {
+  it('creates all 10 expected tables', () => {
     const db = createTestDb()
     const tables = getTableNames(db)
     for (const table of EXPECTED_TABLES) {
