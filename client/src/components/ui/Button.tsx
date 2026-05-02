@@ -8,6 +8,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size
   loading?: boolean
   children: ReactNode
+  href?: string
+  download?: boolean | string
 }
 
 const variantClasses: Record<Variant, string> = {
@@ -49,22 +51,39 @@ export default function Button({
   disabled,
   children,
   className = '',
+  href,
+  download,
   ...rest
 }: ButtonProps) {
   const isDisabled = disabled || loading
+
+  const classes = [
+    'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-all duration-100',
+    'active:scale-[0.98]',
+    isDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : '',
+    variantClasses[variant],
+    sizeClasses[size],
+    className,
+  ].join(' ')
+
+  if (href) {
+    return (
+      <a
+        href={isDisabled ? undefined : href}
+        download={download}
+        className={classes}
+        aria-disabled={isDisabled}
+      >
+        {loading ? <Spinner /> : children}
+      </a>
+    )
+  }
 
   return (
     <button
       {...rest}
       disabled={isDisabled}
-      className={[
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-all duration-100',
-        'active:scale-[0.98]',
-        'disabled:opacity-40 disabled:cursor-not-allowed',
-        variantClasses[variant],
-        sizeClasses[size],
-        className,
-      ].join(' ')}
+      className={classes}
     >
       {loading ? <Spinner /> : children}
     </button>

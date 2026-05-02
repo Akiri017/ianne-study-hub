@@ -9,7 +9,7 @@ import { errorHandler } from './middleware/error-handler'
 import subjectsRouter from './routes/subjects'
 import modulesRouter, { deleteModule } from './routes/modules'
 import generateRouter, { multiModuleQuiz, regenerate } from './routes/generate'
-import outputsRouter from './routes/outputs'
+import outputsRouter, { notesExportRouter } from './routes/outputs'
 import quizzesRouter, { subjectQuizzes } from './routes/quizzes'
 import weakPointsRouter, { subjectWeakPoints } from './routes/weak-points'
 import tasksRouter, { subjectTasks } from './routes/tasks'
@@ -40,8 +40,9 @@ api.use('/subjects/:subjectId/weak-points', subjectWeakPoints)
 api.use('/subjects/:subjectId/tasks', subjectTasks)
 api.use('/subjects/:subjectId/reviewer', reviewerRouter)
 
-// Modules (standalone delete)
+// Modules (standalone delete and export)
 api.use('/modules', deleteModule)
+api.use('/modules', notesExportRouter)
 
 // Annotations
 api.use('/modules/:moduleId/annotations', annotationsRouter)

@@ -7,8 +7,47 @@
 
 import { Router, Request, Response } from 'express'
 import db from '../db/index'
+import { buildReviewerDocx } from '../services/exporter'
 
 const router = Router()
+
+export const notesExportRouter = Router({ mergeParams: true })
+
+notesExportRouter.get('/:moduleId/notes/export', async (req: Request, res: Response) => {
+  const moduleId = Number(req.params.moduleId)
+  if (!Number.isInteger(moduleId) || moduleId <= 0) {
+    res.status(404).json({ error: 'Module not found' })
+    return
+  }
+
+  try {
+    const module = db.prepare('SELECT id, title FROM modules WHERE id = ?').get(moduleId) as { id: number; title: string } | undefined
+    if (!module) {
+      res.status(404).json({ error: 'Module not found' })
+      return
+    }
+
+    const output = db.prepare(
+      "SELECT id, content FROM ai_outputs WHERE module_id = ? AND output_type = 'notes'"
+    ).get(moduleId) as { id: number; content: string } | undefined
+
+    if (!output || !output.content || output.content.trim() === '') {
+      res.status(404).json({ error: 'No notes found for this module' })
+      return
+    }
+
+    const buffer = await buildReviewerDocx(`${module.title} Notes`, output.content)
+
+    const safeTitle = module.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}-notes.docx"`)
+    res.send(buffer)
+  } catch (err) {
+    console.error('[outputs] GET /:moduleId/notes/export error:', err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
 
 interface OutputRow {
   id: number

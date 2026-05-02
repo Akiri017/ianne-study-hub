@@ -645,6 +645,17 @@ export default function OutputPanel({
         {/* Only show edit/regen if we have a real persisted output (with real id) */}
         {existingOutput && existingOutput.id > 0 && (
           <div className="flex items-center gap-2">
+            {outputType === 'notes' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                href={`/api/modules/${moduleId}/notes/export`}
+                download
+                disabled={!resolvedContent || resolvedContent.trim() === ''}
+              >
+                Export DOCX
+              </Button>
+            )}
             {!isEditing && (
               <>
                 <Button
