@@ -71,8 +71,8 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
           const charOffset = content.indexOf(text)
           
           setPopover({
-            x: rect.left + window.scrollX + (rect.width / 2),
-            y: rect.top + window.scrollY - 10,
+            x: rect.left + (rect.width / 2),
+            y: rect.top - 10,
             type: 'create',
             selectedText: text,
             charOffset: charOffset !== -1 ? charOffset : 0
@@ -145,8 +145,8 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
     const ann = annotations.find(a => a.id === annId)
     if (ann) {
       setPopover({
-        x: rect.left + window.scrollX + (rect.width / 2),
-        y: rect.top + window.scrollY - 10,
+        x: rect.left + (rect.width / 2),
+        y: rect.top - 10,
         type: 'view',
         annId: ann.id
       })
@@ -174,7 +174,7 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
                   <mark 
                     data-ann-id={annId}
                     onClick={(e) => handleMarkClick(annId, e)}
-                    className="bg-accent/30 text-text-primary cursor-pointer rounded px-0.5 hover:bg-accent/50 transition-colors"
+                    className="bg-accent/15 text-inherit cursor-pointer rounded px-0.5 underline decoration-accent/50 hover:bg-accent/25 transition-colors"
                   >
                     {children}
                   </mark>
@@ -203,7 +203,7 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
 
       {popover && (
         <div 
-          className="annotation-popover absolute z-50 bg-bg-surface border border-border-default rounded-lg shadow-lg p-3 flex flex-col gap-2 w-64 transform -translate-x-1/2 -translate-y-full"
+          className="annotation-popover fixed z-50 bg-bg-surface border border-border-default rounded-lg shadow-lg p-3 flex flex-col gap-2 w-64 transform -translate-x-1/2 -translate-y-full max-h-72 overflow-y-auto"
           style={{ left: popover.x, top: popover.y }}
         >
           {popover.type === 'create' ? (
@@ -242,7 +242,7 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
                   </button>
                 </div>
               </div>
-              <p className="text-sm text-text-primary whitespace-pre-wrap">{commentInput}</p>
+              <p className="text-sm text-text-primary whitespace-pre-wrap max-h-32 overflow-y-auto">{commentInput}</p>
             </>
           ) : (
              <>
@@ -252,17 +252,21 @@ export default function AnnotatedNotes({ moduleId, content }: AnnotatedNotesProp
               <textarea
                 value={commentInput}
                 onChange={e => setCommentInput(e.target.value)}
-                onBlur={() => {
-                  if (popover.annId && commentInput.trim()) {
-                    handleUpdate(popover.annId, commentInput.trim())
-                    setPopover({ ...popover, type: 'view' })
-                  }
-                }}
                 autoFocus
                 placeholder="Type a comment..."
                 rows={2}
                 className="w-full text-sm bg-bg-subtle border border-border-default rounded p-2 focus:outline-none focus:border-border-strong resize-none"
               />
+              <div className="flex justify-end gap-2">
+                <Button variant="primary" size="sm" onClick={() => {
+                  if (popover.annId && commentInput.trim()) {
+                    handleUpdate(popover.annId, commentInput.trim())
+                    setPopover({ ...popover, type: 'view' })
+                  }
+                }} disabled={!commentInput.trim()}>
+                  Save
+                </Button>
+              </div>
             </>
           )}
         </div>

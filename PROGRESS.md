@@ -1,7 +1,7 @@
 # Ianne's Study Hub — Development Progress
 
 **Started:** April 16, 2026  
-**Status:** In progress — Session 16 complete
+**Status:** In progress — Session 18 complete
 
 ---
 
@@ -45,6 +45,10 @@
 
 **Session 15 — April 29, 2026** — Multi-module quiz button UX. Button in SubjectView was conditionally hidden when `modules.length < 2`; now always visible and disabled with a tooltip when fewer than 2 modules are uploaded. 214 tests passing. TS clean.
 
+**Session 18 — May 8, 2026** — Annotation popover UX fixes. Resolved 4 issues: (1) `mark` UA stylesheet override fixed via `index.css` reset (`background-color: transparent; color: inherit`) so Tailwind highlight classes render correctly; (2) popover switched from `absolute` to `fixed` positioning with raw viewport coordinates — no longer drifts on scroll; (3) popover and comment view capped with `max-h` + `overflow-y-auto` so long comments scroll internally; (4) edit mode now has an explicit Save button replacing the `onBlur` auto-save. 254 tests passing. TS clean.
+
+**Session 17 — May 2, 2026** — Structured Notes DOCX Export. Added `GET /modules/:moduleId/notes/export` route — reads `ai_outputs` for notes content, converts Markdown to DOCX via `exporter.ts` (`buildReviewerDocx` confirmed content-agnostic), streams binary with correct headers. Export DOCX button added to `OutputPanel` toolbar (notes tab only, disabled when no content). `Button.tsx` extended to render as `<a>` tag via `href` prop. 254 tests passing. TS clean.
+
 **Session 16 — April 30, 2026** — Inline note annotations. Users can highlight text in structured notes, attach a comment, edit on blur (P4), and delete. Annotations persist to SQLite (`note_annotations` table, cascade on module delete). Backend: GET/POST/PATCH/DELETE under `/api/modules/:id/annotations`. Frontend: selection handler, markdown pre-pass highlight injection via custom ReactMarkdown components mapper (rehype-sanitize compliant), popover with view/edit/delete modes. 241 tests passing. TS clean.
 
 **Session 14 — April 28, 2026** — Reviewer persistence bug fix. `GET /reviewer` was re-generating on every load with no DB write, losing content on navigation. Split into: `GET /` (reads `subject_reviewers` table, no AI call) and `POST /generate` (Gemini + upsert). Added `subject_reviewers` table (UNIQUE on subject_id, CASCADE on subject delete). Frontend updated: `useEffect` on mount loads persisted content; `generateReviewer` replaces `getReviewer` on button actions. `db-schema.test.ts` updated to expect 9 tables. 216 tests passing. TS clean.
@@ -78,6 +82,7 @@
 ### Should (high priority)
 - [x] FA Session Runner — full-screen quiz runner; one question at a time; MCQ + short answer; answer evaluation; WeakPointPrompt on incorrect; session score on complete; `fa_sessions` persistence
 - [x] Reviewer export — `POST /subjects/:id/reviewer/export`; Claude generates reviewer from Confirmed weak points; DOCX + PDF download via docx + PDFKit
+- [x] Structured notes DOCX export — `GET /modules/:moduleId/notes/export`; downloads notes as `.docx` for cross-device review; Export DOCX button in OutputPanel notes toolbar
 - [x] Task Tracker — task list + calendar view; TaskForm; CRUD routes (`/tasks`, `/subjects/:id/tasks`)
 - [x] Dashboard — open weak point count, upcoming deadlines, recent modules
 
@@ -133,3 +138,9 @@
 | 2026-04-29 | PM | Multi-module quiz button visibility fix — SubjectView always shows button, disabled when < 2 modules | Complete |
 | 2026-04-29 | QA | Session 15 verification | Complete — 214 tests passing, TS clean |
 | 2026-04-29 | CI/CD | Session 15 commit | Complete — 5ed4b1c |
+| 2026-04-30 | Developer | Inline note annotations — note_annotations table, GET/POST/PATCH/DELETE, highlight injection, annotation popover | Complete |
+| 2026-04-30 | QA | Session 16 verification | Complete — 241 tests passing, TS clean |
+| 2026-04-30 | CI/CD | Session 16 commit | Complete — add12ef |
+| 2026-05-02 | Developer | Structured Notes DOCX export — GET /notes/export route, Button.tsx href extension, Export DOCX in OutputPanel | Complete |
+| 2026-05-02 | QA | Session 17 verification | Complete — 254 tests passing, TS clean |
+| 2026-05-02 | CI/CD | Session 17 commit | Complete — 84d8792 |

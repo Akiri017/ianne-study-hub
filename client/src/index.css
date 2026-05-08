@@ -66,4 +66,9 @@
     color: var(--text-primary);
     font-family: var(--font-sans);
   }
+
+  mark {
+    background-color: transparent;
+    color: inherit;
+  }
 }
